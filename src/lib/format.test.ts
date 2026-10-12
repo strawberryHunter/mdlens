@@ -12,6 +12,12 @@ describe("roundPM", () => {
     expect(roundPM(mean, err)).toEqual([m, e]);
   });
 
+  it("writes a mean that rounds to zero without a minus sign", () => {
+    expect(roundPM(-0.3, 2)).toEqual(["0", "2"]);
+    expect(roundPM(-0.0004, 0.012)).toEqual(["0.000", "0.012"]);
+    expect(roundPM(-0.004, 0.012)).toEqual(["-0.004", "0.012"]);
+  });
+
   it("falls back when the error is missing", () => {
     expect(roundPM(1.23456, NaN)).toEqual(["1.235", "–"]);
   });

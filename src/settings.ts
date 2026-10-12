@@ -65,12 +65,25 @@ const TRANSIENT: (keyof Settings)[] = ["title", "xLabel", "yLabels", "from", "to
 const KEY = "mdlens:settings";
 
 function load(): Settings {
+  let raw: string | null;
   try {
-    const saved = JSON.parse(localStorage.getItem(KEY) ?? "{}");
-    return { ...DEFAULT_SETTINGS, ...saved, units: { ...DEFAULT_UNITS, ...saved.units } };
+    raw = localStorage.getItem(KEY);
   } catch {
+    // Storage can be unavailable (private mode); start from the defaults.
     return DEFAULT_SETTINGS;
   }
+  try {
+    return parseSavedSettings(raw);
+  } catch (err) {
+    console.warn("Ignoring unreadable saved settings", err);
+    return DEFAULT_SETTINGS;
+  }
+}
+
+/** Saved preferences merged over the defaults. Throws if the stored text is not JSON. */
+export function parseSavedSettings(raw: string | null): Settings {
+  const saved = JSON.parse(raw ?? "{}");
+  return { ...DEFAULT_SETTINGS, ...saved, units: { ...DEFAULT_UNITS, ...saved.units } };
 }
 
 export function useSettings(): [Settings, (patch: Partial<Settings>) => void] {

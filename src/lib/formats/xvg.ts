@@ -165,6 +165,8 @@ export function xvgDataset(text: string): Dataset {
     xName: x.name || "x",
     xUnit: x.unit,
     quantities,
-    notes: d.skippedLines ? [`${d.skippedLines} unreadable lines were skipped.`] : [],
+    notes: d.skippedLines
+      ? [`${d.skippedLines} unreadable line${d.skippedLines === 1 ? " was" : "s were"} skipped.`]
+      : [],
   };
 }

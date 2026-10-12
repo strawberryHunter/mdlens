@@ -12,7 +12,8 @@
     "typecheck": "tsc",
     "samples": "node scripts/make-samples.mjs",
     "check-dir": "vite-node scripts/check-dir.ts",
-    "render": "vite-node scripts/render.ts"
+    "render": "vite-node scripts/render.ts",
+    "validate": "vite-node scripts/validate-reference.ts"
   },
   "dependencies": {
     "@fontsource-variable/inter": "5.1.0",

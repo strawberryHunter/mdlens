@@ -32,10 +32,12 @@ export function parseNamdLog(text: string): Dataset {
   let titles: string[] | null = null;
   let timestepFs: number | null = null;
   const rows: number[][] = [];
+  let beforeTitles = 0;
 
   for (const line of text.split(/\r?\n/)) {
     if (line.startsWith("ENERGY:")) {
       if (titles) rows.push(numbersIn(line.slice(7)));
+      else beforeTitles++;
     } else if (line.startsWith("ETITLE:")) {
       titles ??= line.slice(7).trim().split(/\s+/);
     } else if (timestepFs === null) {
@@ -45,6 +47,9 @@ export function parseNamdLog(text: string): Dataset {
   }
 
   const notes: string[] = [];
+  if (beforeTitles) notes.push(`${beforeTitles} ENERGY line${beforeTitles === 1 ? "" : "s"} before the first ETITLE ${beforeTitles === 1 ? "was" : "were"} skipped.`);
+  const short = titles ? rows.filter((r) => r.length !== titles!.length).length : 0;
+  if (short) notes.push(`${short} ENERGY line${short === 1 ? " has" : "s have"} a different number of columns than ETITLE; missing values are shown as gaps.`);
   if (!titles) return { engine: "NAMD", title: "", xName: "Step", xUnit: "", quantities: [], notes };
 
   const steps = rows.map((r) => r[0]);

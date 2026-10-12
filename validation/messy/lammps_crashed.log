@@ -1,0 +1,15 @@
+LAMMPS (2 Aug 2023 - Update 3)
+units           real
+timestep        2.0
+thermo          100
+run             10000
+Per MPI rank memory allocation (min/avg/max) = 24.13 | 24.13 | 24.13 Mbytes
+   Step          Temp          Press          PotEng    
+         0   300.0          1.2           -30210.5      
+       100   301.5        -50.3           -30205.1      
+WARNING: Bond/angle/dihedral extent > half of periodic box length (src/domain.cpp:933)
+       200   305.9        120.8           -30190.2      
+WARNING: Bond/angle/dihedral extent > half of periodic box length (src/domain.cpp:933)
+       300   352.4        890.1           -29870.3      
+ERROR: Lost atoms: original 3000 current 2987 (src/thermo.cpp:488)
+Last command: run 10000

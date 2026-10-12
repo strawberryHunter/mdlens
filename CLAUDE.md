@@ -8,6 +8,8 @@ Browser app that reads MD engine output (GROMACS, NAMD, OpenMM, CHARMM, LAMMPS, 
 - `npx tsc`: typecheck. `npm run build`: production build into `dist/`.
 - `npm run check-dir -- <folder>`: parse every MD file under a folder and report counts, notes and errors. Run on real data after any parser change.
 - `npm run samples`: regenerate `public/samples` (deterministic, seeded).
+- `npm run validate`: compare the statistics with the pymbar reference values. Regenerate them with `conda run -n mdlens-ref python validation/make_reference.py` (environment in `validation/environment.yml`).
+- `validation/messy/`: damaged real-world files; any parser change must keep `src/lib/formats/messy.test.ts` passing.
 
 ## Layout
 

@@ -30,6 +30,22 @@ MDLens reads output from GROMACS, NAMD, OpenMM, CHARMM, LAMMPS, AMBER and PLUMED
 | PLUMED | `COLVAR`, `HILLS` | `#! FIELDS` header |
 | Any | CSV, TSV or whitespace tables, cpptraj `.dat`, LAMMPS `fix ave/time` | names from the header or last comment line |
 
+## Validation
+
+Statistics are checked against [pymbar](https://github.com/choderalab/pymbar) 4.2.0, the reference implementation of the equilibration method, on five series (white noise, AR(1) noise, fast and slow relaxations, and the temperature from the NAMD sample log read by an independent Python parser):
+
+| Check | Result |
+|---|---|
+| Statistical inefficiency vs `statistical_inefficiency(fast=True)` | identical to ~10⁻¹⁵ (relative) |
+| Mean and SE over the same production region | identical to ~10⁻¹⁵ |
+| Equilibration start, exhaustive search vs `detect_equilibration` | identical in all five cases |
+| Equilibration start, the app's fast default (≤ 1000 points, 60 candidates) | production means within 0.55 SE of pymbar's |
+| NAMD temperatures read by MDLens vs the Python parser | identical |
+
+`npm run validate` prints the comparison. `validation/make_reference.py` regenerates the reference values (`conda env create -f validation/environment.yml`).
+
+`validation/messy/` holds damaged files (a LAMMPS run that lost atoms, a truncated log, AMBER fields printed as `*****`, an AMBER TI run that turns to NaN, cut-off NAMD and CHARMM logs, an OpenMM CSV with a restart in the middle, an `.xvg` with a crash message). Each must load, and the parser must say what it skipped; see `src/lib/formats/messy.test.ts`.
+
 ## Development
 
 ```bash

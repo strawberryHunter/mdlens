@@ -15,7 +15,9 @@ export function roundPM(mean: number, err: number): [string, string] {
   const exp = Math.floor(Math.log10(err));
   const decimals = Math.max(0, (err / 10 ** exp < 2 ? 1 : 0) - exp);
   if (decimals > 8 || exp > 6) return [fmt(mean), fmt(err)];
-  return [mean.toFixed(decimals), err.toFixed(decimals)];
+  // toFixed keeps the sign of values that round to zero ("-0"); papers write "0".
+  const m = mean.toFixed(decimals).replace(/^-(0(\.0+)?)$/, "$1");
+  return [m, err.toFixed(decimals)];
 }
 
 export function pm(mean: number, err: number, unit = ""): string {

@@ -22,24 +22,38 @@ const NAMES: Record<string, [string, string]> = {
   VIRIAL: ["Virial", KCAL],
   VOLUME: ["Volume", "Å³"],
   Density: ["Density", "g/cm³"],
+  // Thermodynamic integration: dV/dλ, the integrand of the free-energy estimate.
+  "DV/DL": ["dV/dλ", KCAL],
 };
 
-const PAIR = /([A-Za-z0-9][A-Za-z0-9()_ -]*?)\s*=\s*([-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?|\*+|NaN)/g;
+const PAIR = /([A-Za-z0-9][A-Za-z0-9()/_ -]*?)\s*=\s*([-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?|\*+|NaN)/g;
+
+const plural = (n: number, one: string, many: string) => (n === 1 ? one : many);
 
 /**
  * AMBER mdout (sander/pmemd MD). Each frame is a block of `KEY = value` pairs starting at
- * `NSTEP =`. The averages and fluctuations blocks at the end are skipped.
+ * `NSTEP =`. The averages and fluctuations blocks at the end are skipped. In TI runs every
+ * step is printed once per TI region; region 1 is read.
  */
 export function parseAmberMdout(text: string): Dataset {
   const frames: Map<string, number>[] = [];
   const order: string[] = [];
   let current: Map<string, number> | null = null;
   let skipNext = false;
+  let region = 1;
+  let otherRegionFrames = 0;
+  let overflows = 0;
+  let nans = 0;
 
   for (const line of text.split(/\r?\n/)) {
     if (/A V E R A G E S|F L U C T U A T I O N S/.test(line)) {
       skipNext = true;
       current = null;
+      continue;
+    }
+    const regionMark = line.match(/^\|\s*TI region\s+(\d+)\s*$/);
+    if (regionMark) {
+      region = Number(regionMark[1]);
       continue;
     }
     if (/^\s*-{20,}\s*$/.test(line)) {
@@ -52,13 +66,22 @@ export function parseAmberMdout(text: string): Dataset {
         current = null;
         continue;
       }
+      if (region !== 1) {
+        otherRegionFrames++;
+        current = null;
+        continue;
+      }
       current = new Map();
       frames.push(current);
     }
     if (!current) continue;
     for (const [, key, value] of line.matchAll(PAIR)) {
       const k = key.trim();
-      current.set(k, /^\*+$/.test(value) ? NaN : Number(value));
+      // Fortran prints ***** when a value does not fit its field.
+      const overflow = /^\*+$/.test(value);
+      if (overflow) overflows++;
+      if (value === "NaN") nans++;
+      current.set(k, overflow ? NaN : Number(value));
       if (!order.includes(k)) order.push(k);
     }
   }
@@ -71,12 +94,31 @@ export function parseAmberMdout(text: string): Dataset {
       return { name, unit, values: frames.map((f) => f.get(k) ?? NaN) };
     });
 
+  const notes: string[] = [];
+  if (otherRegionFrames) {
+    notes.push(`TI output: region 1 is shown; ${otherRegionFrames} ${plural(otherRegionFrames, "frame", "frames")} from other TI regions ${plural(otherRegionFrames, "was", "were")} skipped.`);
+  }
+  if (overflows) {
+    notes.push(`${overflows} ${plural(overflows, "value", "values")} printed as ***** (field overflow) ${plural(overflows, "is", "are")} shown as missing.`);
+  }
+  // NaN temperatures mean the integrator blew up; everything after is meaningless.
+  const temperature = frames.map((f) => f.get("TEMP(K)"));
+  const firstBad = temperature.findIndex((t) => t !== undefined && Number.isNaN(t));
+  if (firstBad >= 0) {
+    const bad = temperature.filter((t) => t !== undefined && Number.isNaN(t)).length;
+    notes.push(
+      `Temperature is NaN from ${x[firstBad]} ps on (${bad} of ${frames.length} frames): the simulation likely became unstable. Values after that point are not meaningful.`,
+    );
+  } else if (nans) {
+    notes.push(`${nans} ${plural(nans, "value is", "values are")} NaN.`);
+  }
+
   return {
     engine: "AMBER",
     title: "AMBER mdout",
     xName: "Time",
     xUnit: "ps",
     quantities: columnsToQuantities(x, columns),
-    notes: [],
+    notes,
   };
 }

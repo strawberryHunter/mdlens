@@ -1,0 +1,10 @@
+# Environment for regenerating the pymbar reference values.
+#   conda env create -f validation/environment.yml
+#   conda run -n mdlens-ref python validation/make_reference.py
+name: mdlens-ref
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11
+  - numpy
+  - pymbar-core=4.2.0

@@ -45,6 +45,7 @@ export function parseCharmmOut(text: string): Dataset {
   const order: string[] = [];
   const seen = new Set<string>();
   let current: Map<string, number> | null = null;
+  let unnamed = 0;
 
   for (const line of text.split(/\r?\n/)) {
     let m = line.match(/^DYNA ([A-Z]+):\s+(.*)$/);
@@ -56,7 +57,10 @@ export function parseCharmmOut(text: string): Dataset {
     if (!m) continue;
     const group = m[1] ?? "";
     const names = headers.get(group);
-    if (!names) continue;
+    if (!names) {
+      unnamed++;
+      continue;
+    }
     if (group === "") {
       current = new Map();
       frames.push(current);
@@ -78,6 +82,7 @@ export function parseCharmmOut(text: string): Dataset {
   const x = frames.map((f) => f.get("Time") ?? NaN);
   const runs = joinSegments(x);
   if (runs > 1) notes.push(`${runs} dynamics runs found; they are joined end to end.`);
+  if (unnamed) notes.push(`${unnamed} DYNA line${unnamed === 1 ? "" : "s"} without a matching "DYNA …:" header ${unnamed === 1 ? "was" : "were"} skipped.`);
 
   const columns: Column[] = order
     .filter((key) => key !== "Step" && key !== "Time")

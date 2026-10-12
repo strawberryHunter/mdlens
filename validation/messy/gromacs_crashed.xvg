@@ -1,0 +1,11 @@
+# This file was created by gmx rms (synthetic example)
+@    title "RMSD"
+@    xaxis  label "Time (ps)"
+@    yaxis  label "RMSD (nm)"
+@TYPE xy
+    0.000    0.0000
+  100.000    0.1021
+  200.000    0.1530
+Segmentation fault (core dumped)
+  300.000    0.1712
+  400.000    0.1805

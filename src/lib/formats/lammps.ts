@@ -71,6 +71,7 @@ export function parseLammpsLog(text: string): Dataset {
   let dt: number | null = null;
   const blocks: { header: string[]; rows: number[][] }[] = [];
   const notes: string[] = [];
+  let warnings = 0;
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i].trim();
@@ -90,20 +91,32 @@ export function parseLammpsLog(text: string): Dataset {
     }
     const rows: number[][] = [];
     let j = i + 1;
+    let blockWarnings = 0;
     for (; j < lines.length; j++) {
       const next = lines[j];
-      if (/^\s*WARNING/.test(next)) continue;
+      if (/^\s*WARNING/.test(next)) {
+        blockWarnings++;
+        continue;
+      }
       const row = readRow(next, header.length);
       if (!row) break;
       rows.push(row);
     }
     if (!rows.length) continue;
     blocks.push({ header, rows });
+    warnings += blockWarnings;
+    // A run normally ends with "Loop time of …"; anything else means it stopped early.
+    if (lines.slice(j).every((l) => !l.trim())) {
+      notes.push(`The log ends inside run ${blocks.length} (still running, or truncated).`);
+    } else if (!/^\s*Loop time of/.test(lines[j])) {
+      notes.push(`Run ${blocks.length} stopped before finishing: "${lines[j].trim().slice(0, 80)}"`);
+    }
     i = j - 1;
   }
 
   const u = SYSTEMS[style] ?? SYSTEMS.lj;
   if (!SYSTEMS[style]) notes.push(`Units style "${style}" is not supported; values are shown without units.`);
+  if (warnings) notes.push(`${warnings} WARNING line${warnings === 1 ? "" : "s"} inside thermo output ${warnings === 1 ? "was" : "were"} skipped.`);
 
   // Merge runs. LAMMPS repeats the last step of a run as the first step of the next.
   const keys: string[] = [];

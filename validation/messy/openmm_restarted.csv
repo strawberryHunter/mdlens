@@ -1,0 +1,9 @@
+#"Step","Time (ps)","Potential Energy (kJ/mole)","Temperature (K)"
+1000,2.0,-330120.5,299.1
+2000,4.0,-330200.1,300.4
+3000,6.0,-330180.7,300.9
+Simulation restarted from checkpoint at step 3000
+#"Step","Time (ps)","Potential Energy (kJ/mole)","Temperature (K)"
+4000,8.0,-330190.2,299.7
+5000,10.0,-330210.9,300.2
+6000,12.0,-3302

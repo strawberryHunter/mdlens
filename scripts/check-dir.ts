@@ -47,8 +47,8 @@ for (const path of walk(root)) {
 const list = (title: string, items: string[]) => {
   if (!items.length) return;
   console.log(`\n${title} (${items.length}):`);
-  for (const i of items.slice(0, 12)) console.log(`  ${i}`);
-  if (items.length > 12) console.log(`  … ${items.length - 12} more`);
+  for (const i of items.slice(0, process.env.ALL ? items.length : 12)) console.log(`  ${i}`);
+  if (!process.env.ALL && items.length > 12) console.log(`  … ${items.length - 12} more`);
 };
 
 console.log("Files with data by engine:");

@@ -46,7 +46,14 @@ export default function App() {
     const added: LoadedFile[] = [];
     const rejected: string[] = [];
     for (const { name, text } of incoming) {
-      const dataset = parseFile(name, text);
+      let dataset;
+      try {
+        dataset = parseFile(name, text);
+      } catch (err) {
+        console.error(`Failed to parse ${name}`, err);
+        rejected.push(`${name}: could not be read (${(err as Error).message})`);
+        continue;
+      }
       if (!dataset.quantities.length) rejected.push(`${name}: no data recognised`);
       else if (dataset.quantities.length > MAX_QUANTITIES) rejected.push(`${name}: ${dataset.quantities.length.toLocaleString()} columns (per-atom output)`);
       else added.push(loadFile(`f${nextId++}`, name, dataset, PALETTE[(files.length + added.length) % PALETTE.length]));
@@ -64,15 +71,28 @@ export default function App() {
 
   async function loadFileList(list: FileList | null) {
     if (!list?.length) return;
-    load(await Promise.all([...list].map(async (f) => ({ name: f.name, text: await f.text() }))));
+    try {
+      load(await Promise.all([...list].map(async (f) => ({ name: f.name, text: await f.text() }))));
+    } catch (err) {
+      console.error("Failed to read files", err);
+      setNotice(`Could not read the files: ${(err as Error).message}`);
+    }
   }
 
   async function loadSamples(names: string[]) {
     const base = import.meta.env.BASE_URL;
     try {
-      load(await Promise.all(names.map(async (name) => ({ name, text: await (await fetch(`${base}samples/${name}`)).text() }))));
-    } catch {
-      setNotice("Could not load the sample files.");
+      const fetched = await Promise.all(
+        names.map(async (name) => {
+          const res = await fetch(`${base}samples/${name}`);
+          if (!res.ok) throw new Error(`${name}: HTTP ${res.status}`);
+          return { name, text: await res.text() };
+        }),
+      );
+      load(fetched);
+    } catch (err) {
+      console.error("Failed to load samples", err);
+      setNotice(`Could not load the sample files: ${(err as Error).message}`);
     }
   }
 

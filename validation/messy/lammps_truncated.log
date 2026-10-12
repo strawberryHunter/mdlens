@@ -1,0 +1,9 @@
+LAMMPS (2 Aug 2023 - Update 3)
+units           metal
+timestep        0.001
+run             100000
+   Step          Temp          PotEng         Press     
+         0   300.0         -1520.31        12.0         
+      1000   298.7         -1521.02       -40.5         
+      2000   301.1         -1520.88        25.1         
+      3000   299.6         -1521.40         3.3         

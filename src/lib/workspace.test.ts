@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { Dataset } from "./dataset";
 import { DEFAULT_UNITS } from "./units";
-import { buildCatalog, buildPanels, loadFile } from "./workspace";
+import { summarize } from "./stats";
+import { buildCatalog, buildPanels, loadFile, scaleSummary, timeAxis } from "./workspace";
 
 const namd: Dataset = {
   engine: "NAMD",
@@ -73,5 +74,23 @@ describe("buildPanels", () => {
     const { panels } = buildPanels(["potential energy|energy"], catalog, files, { ...DEFAULT_UNITS, energy: "kJ/mol" }, false);
     const fromNamd = panels[0].series.find((s) => s.fileId === "a")!;
     expect(fromNamd.summary.mean).toBeCloseTo(-41.84);
+  });
+});
+
+describe("timeAxis", () => {
+  it("converts time axes to the preferred unit and leaves other axes alone", () => {
+    expect(timeAxis({ ...namd, xUnit: "fs" }, DEFAULT_UNITS)).toEqual({ factor: 1e-6, unit: "ns" });
+    expect(timeAxis({ ...namd, xName: "Residue", xUnit: "" }, DEFAULT_UNITS)).toEqual({ factor: 1, unit: "" });
+  });
+});
+
+describe("scaleSummary", () => {
+  it("scales values by the y factor, the start by the x factor and the slope by their ratio", () => {
+    const s = summarize([0, 1, 2, 3], [1, 2, 3, 4], { from: 0, to: Infinity });
+    const scaled = scaleSummary(s, 10, 0.5);
+    expect([scaled.mean, scaled.sd, scaled.min, scaled.max]).toEqual([s.mean * 10, s.sd * 10, 10, 40]);
+    expect(scaled.se).toBeCloseTo(s.se * 10);
+    expect(scaled.from).toBe(0);
+    expect(scaled.slope).toBeCloseTo((s.slope * 10) / 0.5);
   });
 });

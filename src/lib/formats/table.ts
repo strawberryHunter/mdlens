@@ -57,11 +57,15 @@ export function parseTable(text: string): Dataset {
   }
 
   // Keep mostly-numeric rows of the most common width; anything else is noise.
-  const rows = dataLines.map((l) => splitCells(l, sep)).filter(isDataRow);
+  const cells = dataLines.map((l) => splitCells(l, sep));
   const widths = new Map<number, number>();
-  for (const r of rows) widths.set(r.length, (widths.get(r.length) ?? 0) + 1);
+  for (const r of cells) if (isDataRow(r)) widths.set(r.length, (widths.get(r.length) ?? 0) + 1);
   const width = [...widths].sort((a, b) => b[1] - a[1])[0]?.[0] ?? 0;
-  const table = rows.filter((r) => r.length === width).map((r) => r.map(readCell));
+  const fits = cells.map((r) => r.length === width && isDataRow(r));
+  const table = cells.filter((_, i) => fits[i]).map((r) => r.map(readCell));
+  // Text before the table starts (e.g. "Using platform: CUDA") is a preamble, not lost data.
+  const start = fits.indexOf(true);
+  const skipped = start < 0 ? 0 : fits.slice(start).filter((f) => !f).length;
 
   const empty: Dataset = { engine, title: "", xName: "x", xUnit: "", quantities: [], notes: [] };
   if (width < 2 || table.length < 2) return empty;
@@ -97,6 +101,6 @@ export function parseTable(text: string): Dataset {
     // PLUMED reports time in ps unless told otherwise.
     xUnit: xLabel.unit || (engine === "PLUMED" && xName === "Time" ? "ps" : ""),
     quantities: columnsToQuantities(x, columns),
-    notes: [],
+    notes: skipped ? [`${skipped} line${skipped === 1 ? "" : "s"} did not fit the ${width}-column table and ${skipped === 1 ? "was" : "were"} skipped.`] : [],
   };
 }
