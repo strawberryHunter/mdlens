@@ -94,3 +94,53 @@ describe("scaleSummary", () => {
     expect(scaled.slope).toBeCloseTo((s.slope * 10) / 0.5);
   });
 });
+
+describe("buildPanels with mixed x axes", () => {
+  const steps: Dataset = { ...namd, xName: "Step", xUnit: "", quantities: [{ name: "Temperature", unit: "K", x: [0, 500, 1000], y: [300, 301, 302] }] };
+  const mixed = [files[0], loadFile("c", "tail.log", steps, "#333")];
+  const catalog = buildCatalog(mixed);
+
+  it("keeps the time axis and lists files on other axes", () => {
+    const r = buildPanels(["temperature|temperature"], catalog, mixed, DEFAULT_UNITS, false);
+    expect(r.xIsTime).toBe(true);
+    expect(r.panels[0].series.map((s) => s.fileId)).toEqual(["a"]);
+    expect(r.excluded).toEqual([{ fileId: "c", label: "tail", axis: "Step" }]);
+  });
+
+  it("uses the other axis when no file has time", () => {
+    const r = buildPanels(["temperature|temperature"], catalog, mixed.map((f) => (f.id === "a" ? { ...f, visible: false } : f)), DEFAULT_UNITS, false);
+    expect(r.xIsTime).toBe(false);
+    expect(r.xLabel).toBe("Step");
+    expect(r.excluded).toEqual([]);
+  });
+
+  it("drops a panel whose quantity only exists in excluded files", () => {
+    const onlySteps: Dataset = { ...steps, quantities: [{ name: "Lambda", unit: "", x: [0, 1], y: [0, 1] }] };
+    const fs = [files[0], loadFile("d", "lambda.dat", onlySteps, "#444")];
+    const r = buildPanels(["temperature|temperature", "lambda|"], buildCatalog(fs), fs, DEFAULT_UNITS, false);
+    expect(r.panels.map((p) => p.yLabel)).toEqual(["Temperature (K)"]);
+    expect(r.excluded.map((e) => e.fileId)).toEqual(["d"]);
+  });
+});
+
+describe("unstable runs", () => {
+  const blown: Dataset = {
+    ...namd,
+    quantities: [
+      { name: "Temperature", unit: "K", x: [0, 1000, 2000, 3000], y: [300, 301, NaN, NaN] },
+      { name: "Potential energy", unit: "kcal/mol", x: [0, 1000, 2000, 3000], y: [-10, -11, 5e9, 6e9] },
+    ],
+  };
+  const f = loadFile("u", "blown.log", blown, "#555");
+
+  it("records where the run became unstable and leaves later frames out of statistics", () => {
+    expect(f.unstableFrom).toBe(2000);
+    expect(f.summaries[1].max).toBe(-10);
+    expect(f.notes.at(-1)).toMatch(/Temperature becomes NaN at 2000 ps/);
+  });
+
+  it("passes the point on to plotted series in display units", () => {
+    const { panels } = buildPanels(["potential energy|energy"], buildCatalog([f]), [f], DEFAULT_UNITS, false);
+    expect(panels[0].series[0].unstableFrom).toBe(2);
+  });
+});

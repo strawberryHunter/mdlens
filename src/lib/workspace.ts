@@ -1,4 +1,4 @@
-import type { Dataset } from "./dataset";
+import { findInstability, type Dataset } from "./dataset";
 import { summarize, type Summary } from "./stats";
 import {
   conversionFactor,
@@ -22,6 +22,10 @@ export interface LoadedFile {
   color: string;
   visible: boolean;
   dataset: Dataset;
+  /** Parser notes plus what loading found (e.g. where the run became unstable). */
+  notes: string[];
+  /** x value (recorded units) where the run became unstable; frames from here on are left out of statistics. */
+  unstableFrom: number | null;
   /** Production statistics per quantity, in recorded units. */
   summaries: Summary[];
 }
@@ -56,6 +60,15 @@ export const isTimeAxis = (d: Dataset) => dimensionOf(d.xUnit) === "time";
 
 export function loadFile(id: string, name: string, dataset: Dataset, color: string): LoadedFile {
   const whole = { from: -Infinity, to: Infinity };
+  const time = isTimeAxis(dataset);
+  const instability = time ? findInstability(dataset) : null;
+  const notes = [...dataset.notes];
+  if (instability) {
+    notes.push(
+      `${instability.quantity} becomes NaN at ${instability.from} ${dataset.xUnit} and stays that way (${instability.frames} of ${instability.total} frames): the run likely became unstable. Statistics use only the frames before it.`,
+    );
+  }
+  const until = instability?.from ?? Infinity;
   return {
     id,
     name,
@@ -63,8 +76,10 @@ export function loadFile(id: string, name: string, dataset: Dataset, color: stri
     color,
     visible: true,
     dataset,
+    notes,
+    unstableFrom: instability?.from ?? null,
     // Equilibration only means something along time.
-    summaries: dataset.quantities.map((q) => summarize(q.x, q.y, isTimeAxis(dataset) ? undefined : whole)),
+    summaries: dataset.quantities.map((q) => summarize(q.x, q.y, time ? undefined : whole, until)),
   };
 }
 
@@ -148,6 +163,8 @@ export interface PlotSeries {
   dy?: number[];
   /** Production statistics in display units (auto-detected region). */
   summary: Summary;
+  /** Where the run became unstable, in display units. */
+  unstableFrom?: number;
 }
 
 export interface Panel {
@@ -157,9 +174,20 @@ export interface Panel {
   series: PlotSeries[];
 }
 
+/** A file left out of a figure because its x axis is not the figure's (e.g. steps among times). */
+export interface ExcludedFile {
+  fileId: string;
+  label: string;
+  axis: string;
+}
+
+const axisKind = (d: Dataset) => (isTimeAxis(d) ? "time" : `${d.xName}|${d.xUnit}`);
+
 /**
  * Turns the selected catalog entries into figure panels: one per quantity, or one per unit
- * when `merge` is on. Values are converted to the preferred units.
+ * when `merge` is on. Values are converted to the preferred units. Panels share one x axis,
+ * so files whose x axis is of another kind are left out and listed in `excluded`; time wins
+ * when there is a choice.
  */
 export function buildPanels(
   selected: string[],
@@ -167,9 +195,19 @@ export function buildPanels(
   files: LoadedFile[],
   prefs: UnitPrefs,
   merge: boolean,
-): { panels: Panel[]; xLabel: string } {
+): { panels: Panel[]; xLabel: string; xIsTime: boolean; excluded: ExcludedFile[] } {
   const fileById = new Map(files.map((f) => [f.id, f]));
   const entries = selected.map((k) => catalog.find((e) => e.key === k)).filter((e): e is CatalogEntry => !!e);
+
+  const contributing = [
+    ...new Set(entries.flatMap((e) => e.refs.map((r) => r.fileId)).filter((id) => fileById.get(id)?.visible)),
+  ].map((id) => fileById.get(id)!);
+  const kinds = contributing.map((f) => axisKind(f.dataset));
+  const figureAxis = kinds.includes("time") ? "time" : kinds[0];
+  const excluded: ExcludedFile[] = contributing
+    .filter((f) => axisKind(f.dataset) !== figureAxis)
+    .map((f) => ({ fileId: f.id, label: f.label, axis: formatLabel(f.dataset.xName, f.dataset.xUnit) }));
+  const onAxis = (f: LoadedFile) => f.visible && axisKind(f.dataset) === figureAxis;
 
   const groups: CatalogEntry[][] = [];
   for (const e of entries) {
@@ -182,13 +220,13 @@ export function buildPanels(
   let xLabel = "";
   const panels = groups.map((group) => {
     const unit = displayUnit(group[0].unit, prefs);
-    const contributing = new Set(group.flatMap((e) => e.refs.filter((r) => fileById.get(r.fileId)?.visible).map((r) => r.fileId)));
-    const manyFiles = contributing.size > 1;
+    const groupFiles = new Set(group.flatMap((e) => e.refs.filter((r) => onAxis(fileById.get(r.fileId)!)).map((r) => r.fileId)));
+    const manyFiles = groupFiles.size > 1;
 
     const series: PlotSeries[] = group.flatMap((e, qi) =>
       e.refs.flatMap(({ fileId, index }) => {
         const f = fileById.get(fileId);
-        if (!f?.visible) return [];
+        if (!f || !onAxis(f)) return [];
         const q = f.dataset.quantities[index];
         const fy = conversionFactor(q.unit, unit) ?? 1;
         const tx = timeAxis(f.dataset, prefs);
@@ -206,6 +244,7 @@ export function buildPanels(
             y: fy === 1 ? q.y : q.y.map((v) => v * fy),
             dy: q.dy && fy !== 1 ? q.dy.map((v) => v * fy) : q.dy,
             summary: scaleSummary(f.summaries[index], fy, tx.factor),
+            unstableFrom: f.unstableFrom === null ? undefined : f.unstableFrom * tx.factor,
           },
         ];
       }),
@@ -216,5 +255,6 @@ export function buildPanels(
     return { id: group.map((e) => e.key).join("+"), yLabel, unit, series };
   });
 
-  return { panels, xLabel };
+  // A quantity that only exists in excluded files would be an empty panel.
+  return { panels: panels.filter((p) => p.series.length), xLabel, xIsTime: figureAxis === "time", excluded };
 }

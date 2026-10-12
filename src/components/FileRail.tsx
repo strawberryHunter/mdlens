@@ -81,7 +81,7 @@ export function FileRail({
                 {f.dataset.quantities.length} quantities{span(f, prefs) && ` · ${span(f, prefs)}`}
               </span>
             </div>
-            {f.dataset.notes.map((n) => (
+            {f.notes.map((n) => (
               <p key={n} className="mt-1 flex gap-1 text-[11px] leading-snug text-warn" style={{ paddingLeft: 22 }}>
                 <Info className="mt-px size-3 shrink-0" /> {n}
               </p>

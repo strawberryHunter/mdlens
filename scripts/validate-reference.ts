@@ -20,7 +20,7 @@ const reference = JSON.parse(readFileSync(new URL("../src/lib/__fixtures__/pymba
 
 console.log(`pymbar ${reference.pymbar} vs MDLens\n`);
 console.log(
-  ["case".padEnd(24), "g rel.diff", "t0 pymbar", "t0 ours", "t0 ours(all)", "mean pymbar", "mean ours", "Δmean/SE", "SE rel.diff"].join("  "),
+  ["case".padEnd(24), "g rel.diff", "t0 pymbar", "t0 ours", "t0 exhaustive", "mean pymbar", "mean ours", "Δmean/SE", "SE rel.diff"].join("  "),
 );
 for (const [name, c] of Object.entries(reference.cases)) {
   const x = c.y.map((_, i) => i);

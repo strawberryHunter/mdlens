@@ -61,6 +61,17 @@ describe("summarize", () => {
     expect(s.se).toBeGreaterThan((2 * s.sd) / Math.sqrt(s.n));
   });
 
+  it("drops frames at or after `until` before detecting equilibration", () => {
+    const y = [...Array(50).fill(1), ...Array(50).fill(1e6)];
+    const s = summarize(range(100), y, undefined, 50);
+    expect(s.max).toBe(1);
+    expect(s.n).toBeLessThanOrEqual(50);
+  });
+
+  it("ignores `until` when a manual range is given", () => {
+    expect(summarize(range(10), range(10), { from: 0, to: 9 }, 5).n).toBe(10);
+  });
+
   it("uses the given range", () => {
     const s = summarize(range(100), range(100), { from: 50, to: 59 });
     expect(s).toMatchObject({ n: 10, mean: 54.5, from: 50 });

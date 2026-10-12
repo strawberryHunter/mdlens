@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { canonicalName, columnsToQuantities, joinSegments, numbersIn, splitLabel } from "./dataset";
+import { canonicalName, columnsToQuantities, findInstability, joinSegments, numbersIn, splitLabel, type Dataset } from "./dataset";
 
 describe("splitLabel", () => {
   it.each([
@@ -60,5 +60,34 @@ describe("columnsToQuantities", () => {
     ]);
     expect(q.map((c) => c.name)).toEqual(["a"]);
     expect(q[0]).toMatchObject({ unit: "K", x: [0, 1], y: [1, 2] });
+  });
+});
+
+describe("findInstability", () => {
+  const dataset = (name: string, y: number[]): Dataset => ({
+    engine: "AMBER",
+    title: "",
+    xName: "Time",
+    xUnit: "ps",
+    quantities: [{ name, unit: "K", x: y.map((_, i) => i * 10), y }],
+    notes: [],
+  });
+
+  it("finds where the temperature turns NaN for good", () => {
+    expect(findInstability(dataset("Temperature", [300, 301, 299, NaN, NaN, NaN, NaN]))).toEqual({
+      quantity: "Temperature",
+      from: 30,
+      frames: 4,
+      total: 7,
+    });
+  });
+
+  it("ignores isolated gaps and a single missing last value", () => {
+    expect(findInstability(dataset("Temperature", [300, NaN, 301, 299, 300, NaN]))).toBeNull();
+  });
+
+  it("falls back to the total energy and returns null without either", () => {
+    expect(findInstability(dataset("Total energy", [1, 2, NaN, NaN]))?.quantity).toBe("Total energy");
+    expect(findInstability(dataset("RMSD", [1, NaN, NaN]))).toBeNull();
   });
 });

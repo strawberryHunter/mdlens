@@ -2,6 +2,7 @@
 // Usage: npm run check-dir -- ~/simulations
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
+import { findInstability } from "../src/lib/dataset";
 import { parseFile } from "../src/lib/formats/detect";
 
 const root = process.argv[2] ?? ".";
@@ -39,6 +40,8 @@ for (const path of walk(root)) {
     if ((examples.get(d.engine)?.length ?? 0) < 2) examples.set(d.engine, [...(examples.get(d.engine) ?? []), rel]);
     for (const q of d.quantities) longest = Math.max(longest, q.x.length);
     for (const n of d.notes) notes.push(`${rel}: ${n}`);
+    const unstable = findInstability(d);
+    if (unstable) notes.push(`${rel}: ${unstable.quantity} becomes NaN at ${unstable.from} ${d.xUnit} (${unstable.frames} of ${unstable.total} frames)`);
   } catch (err) {
     failed.push(`${rel}: ${(err as Error).message}`);
   }

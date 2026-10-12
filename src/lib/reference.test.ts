@@ -34,9 +34,10 @@ describe("agreement with pymbar 4.2", () => {
     expect(detectEquilibration(index(c.y), c.y, c.y.length, c.y.length).start).toBe(c.t0);
   });
 
-  it.each(cases)("%s: the app's fast default gives a production mean within 1 SE of pymbar's", (_, c) => {
+  it.each(cases)("%s: the app's default (runs up to 2000 frames) gives pymbar's equilibration start and mean", (_, c) => {
+    expect(detectEquilibration(index(c.y), c.y).start).toBe(c.t0);
     const s = summarize(index(c.y), c.y);
-    expect(Math.abs(s.mean - c.production_mean)).toBeLessThan(c.production_se);
+    expect(Math.abs(s.mean - c.production_mean)).toBeLessThan(1e-9 * Math.max(1, Math.abs(c.production_mean)));
   });
 });
 

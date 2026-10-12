@@ -13,6 +13,17 @@ function Status({ panel, timeUnit, constant }: { panel: Panel; timeUnit: string 
     );
   }
   if (!timeUnit || !panel.series.length) return <span className="text-muted">Profile</span>;
+  const unstable = panel.series.filter((s) => s.unstableFrom !== undefined);
+  if (unstable.length) {
+    return (
+      <span className="inline-flex items-center gap-1 text-rose-600 dark:text-rose-400" title="Temperature became NaN and stayed that way. Statistics use only the frames before it.">
+        <TriangleAlert className="size-3.5" />
+        {panel.series.length === 1
+          ? `Unstable from ${fmt(unstable[0].unstableFrom!, 3)} ${timeUnit}`
+          : `${unstable.length} of ${panel.series.length} became unstable`}
+      </span>
+    );
+  }
   const unsettled = panel.series.filter((s) => s.summary.equilibrationFraction > 0.5);
   if (unsettled.length) {
     return (

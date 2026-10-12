@@ -12,6 +12,7 @@ MDLens reads output from GROMACS, NAMD, OpenMM, CHARMM, LAMMPS, AMBER and PLUMED
 
 - **Any engine, one view.** The engine is detected from the file contents. Engine-specific names (`TEMP`, `Temp`, `TEMPerature`, `TEMP(K)`) map to one quantity, and units are converted (kcal ↔ kJ, atm ↔ bar, Å ↔ nm, fs/ps/ns/µs), so runs from different engines overlay directly.
 - **Equilibration detection.** For every quantity, MDLens picks the start of the production region that maximises the number of uncorrelated samples ([Chodera, *J. Chem. Theory Comput.* 2016, 12, 1799](https://doi.org/10.1021/acs.jctc.5b00784)). The cut-off is marked on the figure.
+- **Blow-ups caught.** If the temperature turns NaN and stays that way, the run is flagged as unstable and later frames are left out of the statistics. Files whose x axis is not time (e.g. steps) are kept out of time-axis figures, with a warning.
 - **Honest error bars.** Production averages come with a standard error corrected for autocorrelation (statistical inefficiency), not the naive SD/√N. Values are rounded the way papers report them and copy as `300.0 ± 0.4 K`.
 - **Overview at a glance.** Every quantity gets a card with its production mean, a sparkline and an equilibration status ("Equilibrated at 0.192 ns", "Still relaxing at > 50% of run").
 - **Figures for papers.** 1-column (3.3 in), 2-column (7 in), square and 16:9 presets; stacked panels with a, b, c labels; colour-blind-safe palette; legend placed where it hides the least data. Export SVG (physical size in inches), PNG at 300/600 dpi with DPI metadata (pastes into PowerPoint at the right size), clipboard, or CSV.
@@ -38,11 +39,10 @@ Statistics are checked against [pymbar](https://github.com/choderalab/pymbar) 4.
 |---|---|
 | Statistical inefficiency vs `statistical_inefficiency(fast=True)` | identical to ~10⁻¹⁵ (relative) |
 | Mean and SE over the same production region | identical to ~10⁻¹⁵ |
-| Equilibration start, exhaustive search vs `detect_equilibration` | identical in all five cases |
-| Equilibration start, the app's fast default (≤ 1000 points, 60 candidates) | production means within 0.55 SE of pymbar's |
+| Equilibration start and production mean vs `detect_equilibration` | identical in all five cases |
 | NAMD temperatures read by MDLens vs the Python parser | identical |
 
-`npm run validate` prints the comparison. `validation/make_reference.py` regenerates the reference values (`conda env create -f validation/environment.yml`).
+Every frame is a candidate start, as in pymbar, for runs of up to 2000 frames; longer runs are evenly strided to 2000 frames (about 30 ms per series). `npm run validate` prints the comparison. `validation/make_reference.py` regenerates the reference values (`conda env create -f validation/environment.yml`).
 
 `validation/messy/` holds damaged files (a LAMMPS run that lost atoms, a truncated log, AMBER fields printed as `*****`, an AMBER TI run that turns to NaN, cut-off NAMD and CHARMM logs, an OpenMM CSV with a restart in the middle, an `.xvg` with a crash message). Each must load, and the parser must say what it skipped; see `src/lib/formats/messy.test.ts`.
 

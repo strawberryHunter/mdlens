@@ -199,9 +199,16 @@ export interface Equilibration {
 /**
  * Automated equilibration detection (Chodera, J. Chem. Theory Comput. 2016, 12, 1799):
  * choose the start of production that maximises the number of uncorrelated samples left.
- * Works on at most `maxPoints` evenly strided frames so it stays fast on long runs.
+ * Every frame is a candidate start, as in pymbar's detect_equilibration, so runs of up to
+ * `maxPoints` frames give the same answer as pymbar. Longer runs are evenly strided down to
+ * `maxPoints` frames to keep the search fast (about 30 ms for 2000 frames).
  */
-export function detectEquilibration(x: ArrayLike<number>, y: ArrayLike<number>, maxPoints = 1000, candidates = 60): Equilibration {
+export function detectEquilibration(
+  x: ArrayLike<number>,
+  y: ArrayLike<number>,
+  maxPoints = 2000,
+  candidates = Infinity,
+): Equilibration {
   const { ys, index } = finiteSlice(x, y, maxPoints);
   const m = ys.length;
   if (m < 10) return { start: 0, neff: m };
@@ -228,9 +235,23 @@ export interface Summary extends RangeStats {
 
 /**
  * Production-region statistics. Without a range the region starts at the automatically
- * detected end of equilibration.
+ * detected end of equilibration. `until` drops frames at or after that x before anything is
+ * computed (used to cut a run where it became unstable); it is ignored with a manual range.
  */
-export function summarize(x: ArrayLike<number>, y: ArrayLike<number>, range?: { from: number; to: number }): Summary {
+export function summarize(
+  x: ArrayLike<number>,
+  y: ArrayLike<number>,
+  range?: { from: number; to: number },
+  until = Infinity,
+): Summary {
+  if (!range && Number.isFinite(until)) {
+    const keep: number[] = [];
+    for (let i = 0; i < x.length; i++) if (x[i] < until) keep.push(i);
+    return summarize(
+      keep.map((i) => x[i]),
+      keep.map((i) => y[i]),
+    );
+  }
   let from: number;
   let to = Infinity;
   if (range) {

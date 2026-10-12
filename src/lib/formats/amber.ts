@@ -101,17 +101,7 @@ export function parseAmberMdout(text: string): Dataset {
   if (overflows) {
     notes.push(`${overflows} ${plural(overflows, "value", "values")} printed as ***** (field overflow) ${plural(overflows, "is", "are")} shown as missing.`);
   }
-  // NaN temperatures mean the integrator blew up; everything after is meaningless.
-  const temperature = frames.map((f) => f.get("TEMP(K)"));
-  const firstBad = temperature.findIndex((t) => t !== undefined && Number.isNaN(t));
-  if (firstBad >= 0) {
-    const bad = temperature.filter((t) => t !== undefined && Number.isNaN(t)).length;
-    notes.push(
-      `Temperature is NaN from ${x[firstBad]} ps on (${bad} of ${frames.length} frames): the simulation likely became unstable. Values after that point are not meaningful.`,
-    );
-  } else if (nans) {
-    notes.push(`${nans} ${plural(nans, "value is", "values are")} NaN.`);
-  }
+  if (nans) notes.push(`${nans} ${plural(nans, "value is", "values are")} NaN.`);
 
   return {
     engine: "AMBER",

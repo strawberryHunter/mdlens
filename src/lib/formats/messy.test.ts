@@ -2,6 +2,7 @@
 // Every file must still load, and the parser must say what it skipped.
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import { loadFile } from "../workspace";
 import { parseFile } from "./detect";
 
 const read = (name: string) => readFileSync(new URL(`../../../validation/messy/${name}`, import.meta.url), "utf8");
@@ -32,12 +33,28 @@ describe("messy example files", () => {
     const notes = d.notes.join("\n");
     expect(notes).toMatch(/region 1 is shown; 4 frames from other TI regions were skipped/);
     expect(notes).toMatch(/4 values printed as \*\*\*\*\*/);
-    expect(notes).toMatch(/Temperature is NaN from 13 ps on \(2 of 4 frames\)/);
+    expect(notes).toMatch(/6 values are NaN/);
   });
 
   it("keeps the overflowed AMBER values as gaps rather than numbers", () => {
     const d = parseFile("amber_overflow.mdout", read("amber_overflow.mdout"));
     expect(d.quantities.find((q) => q.name === "Pressure")!.y).toEqual([-120.4, NaN, 35]);
     expect(d.quantities.find((q) => q.name === "Volume")!.y).toEqual([250683.8125, NaN, 250601.5]);
+  });
+});
+
+describe("messy example files, once loaded", () => {
+  it("cuts the AMBER TI statistics where the run became unstable and says so", () => {
+    const f = loadFile("t", "amber_ti_blowup.mdout", parseFile("amber_ti_blowup.mdout", read("amber_ti_blowup.mdout")), "#000");
+    expect(f.unstableFrom).toBe(13);
+    expect(f.notes.join("\n")).toMatch(/Temperature becomes NaN at 13 ps and stays that way \(2 of 4 frames\)/);
+    const i = f.dataset.quantities.findIndex((q) => q.name === "dV/dλ");
+    expect(f.summaries[i].n).toBe(2);
+    expect(f.summaries[i].mean).toBeCloseTo((3.7314 + 4.0021) / 2);
+  });
+
+  it("does not call a truncated last line an instability", () => {
+    const f = loadFile("n", "namd_tail.log", parseFile("namd_tail.log", read("namd_tail.log")), "#000");
+    expect(f.unstableFrom).toBeNull();
   });
 });

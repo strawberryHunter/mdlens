@@ -113,14 +113,14 @@ export default function App() {
 
   // Panels for the figure, in display units.
   const liveSelected = selected.filter((k) => catalog.some((e) => e.key === k));
-  const { panels, xLabel: autoXLabel } = useMemo(
+  const { panels, xLabel: autoXLabel, xIsTime, excluded } = useMemo(
     () => buildPanels(liveSelected, catalog, files, units, settings.merge),
     // liveSelected is derived from selected and catalog.
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [selected, catalog, files, units, settings.merge],
   );
   const firstVisible = files.find((f) => f.visible);
-  const timeUnit = firstVisible && dimensionOf(firstVisible.dataset.xUnit) === "time" ? units.time : null;
+  const timeUnit = xIsTime ? units.time : null;
 
   const xExtent = useMemo((): [number, number] | null => {
     let lo = Infinity;
@@ -281,6 +281,7 @@ export default function App() {
                   onRemovePanel={(id) => setSelected((s) => s.filter((k) => !id.split("+").includes(k)))}
                   baseName={baseName}
                   aggregateFailed={aggregateFailed}
+                  excluded={excluded}
                   notify={setNotice}
                 />
                 <StatsTable groups={statsGroups} timeUnit={timeUnit} manual={manual} onCopy={copyText} />

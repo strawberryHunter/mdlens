@@ -105,3 +105,33 @@ export function columnsToQuantities(x: number[], columns: Column[]): Quantity[] 
     .filter((c) => c.values.some(Number.isFinite))
     .map((c) => ({ name: c.name, unit: c.unit, x, y: c.values }));
 }
+
+export interface Instability {
+  /** Quantity that revealed it (Temperature, or an energy when there is no temperature). */
+  quantity: string;
+  /** x value of the first bad frame. */
+  from: number;
+  frames: number;
+  total: number;
+}
+
+/**
+ * Where a run blew up: the first frame from which the temperature (or total/potential energy)
+ * is non-finite for at least 90% of the remaining frames, and for at least two frames. A
+ * single missing value, such as a truncated last line, is not an instability.
+ */
+export function findInstability(d: Dataset): Instability | null {
+  const q =
+    d.quantities.find((c) => c.name === "Temperature") ??
+    d.quantities.find((c) => c.name === "Total energy") ??
+    d.quantities.find((c) => c.name === "Potential energy");
+  if (!q) return null;
+  const n = q.y.length;
+  const badFrom = new Array<number>(n + 1).fill(0);
+  for (let i = n - 1; i >= 0; i--) badFrom[i] = badFrom[i + 1] + (Number.isFinite(q.y[i]) ? 0 : 1);
+  for (let i = 0; i < n; i++) {
+    if (Number.isFinite(q.y[i])) continue;
+    if (badFrom[i] >= 2 && badFrom[i] >= 0.9 * (n - i)) return { quantity: q.name, from: q.x[i], frames: badFrom[i], total: n };
+  }
+  return null;
+}

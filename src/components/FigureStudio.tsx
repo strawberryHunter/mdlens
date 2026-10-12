@@ -2,7 +2,7 @@ import { ClipboardCopy, FileCode2, ImageDown, Table2, TriangleAlert, X } from "l
 import { useEffect, useRef } from "react";
 import { copyPng, downloadBlob, svgToPng, svgToString, toCsv } from "../lib/export";
 import { buildFigure, figureHeightIn, type FigureSpec } from "../lib/figure";
-import type { Panel } from "../lib/workspace";
+import type { ExcludedFile, Panel } from "../lib/workspace";
 import { PRESETS } from "../settings";
 import { Button, Card, Segmented } from "./ui";
 
@@ -14,6 +14,7 @@ export function FigureStudio({
   onRemovePanel,
   baseName,
   aggregateFailed,
+  excluded,
   notify,
 }: {
   spec: FigureSpec;
@@ -23,6 +24,7 @@ export function FigureStudio({
   onRemovePanel: (id: string) => void;
   baseName: string;
   aggregateFailed: boolean;
+  excluded: ExcludedFile[];
   notify: (message: string) => void;
 }) {
   const hostRef = useRef<HTMLDivElement>(null);
@@ -102,6 +104,15 @@ export function FigureStudio({
         />
       </div>
 
+      {excluded.length > 0 && (
+        <p className="flex items-start gap-2 border-t border-line bg-warn/10 px-4 py-2 text-[12.5px] text-warn">
+          <TriangleAlert className="mt-0.5 size-4 shrink-0" />
+          <span>
+            Not drawn: {excluded.map((e) => `${e.label} (x axis: ${e.axis})`).join(", ")}. A figure needs one kind of x axis; files with a
+            time axis are shown.
+          </span>
+        </p>
+      )}
       {aggregateFailed && (
         <p className="flex items-center gap-2 border-t border-line bg-warn/10 px-4 py-2 text-[12.5px] text-warn">
           <TriangleAlert className="size-4" /> Mean ± SD needs series with identical time points. Hide the files that differ.
