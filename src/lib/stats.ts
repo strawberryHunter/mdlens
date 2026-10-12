@@ -1,0 +1,285 @@
+/** Centered moving average over `window` points; the window shrinks at the edges. NaNs are skipped. */
+export function movingAverage(y: ArrayLike<number>, window: number): number[] {
+  const n = y.length;
+  const w = Math.max(1, Math.round(window));
+  if (w <= 1) return Array.from(y);
+
+  const sum = new Float64Array(n + 1);
+  const count = new Float64Array(n + 1);
+  for (let i = 0; i < n; i++) {
+    const ok = Number.isFinite(y[i]);
+    sum[i + 1] = sum[i] + (ok ? y[i] : 0);
+    count[i + 1] = count[i] + (ok ? 1 : 0);
+  }
+
+  const half = Math.floor(w / 2);
+  const out = new Array<number>(n);
+  for (let i = 0; i < n; i++) {
+    const lo = Math.max(0, i - half);
+    const hi = Math.min(n, i - half + w);
+    const c = count[hi] - count[lo];
+    out[i] = c ? (sum[hi] - sum[lo]) / c : NaN;
+  }
+  return out;
+}
+
+export interface RangeStats {
+  n: number;
+  mean: number;
+  /** Sample standard deviation (n − 1). */
+  sd: number;
+  min: number;
+  max: number;
+}
+
+/** Statistics of the finite y values whose x lies in [from, to]. */
+export function rangeStats(
+  x: ArrayLike<number>,
+  y: ArrayLike<number>,
+  from = -Infinity,
+  to = Infinity,
+): RangeStats {
+  let n = 0;
+  let mean = 0;
+  let m2 = 0;
+  let min = Infinity;
+  let max = -Infinity;
+  for (let i = 0; i < x.length; i++) {
+    const v = y[i];
+    if (x[i] < from || x[i] > to || !Number.isFinite(v)) continue;
+    n++;
+    const d = v - mean;
+    mean += d / n;
+    m2 += d * (v - mean);
+    if (v < min) min = v;
+    if (v > max) max = v;
+  }
+  return {
+    n,
+    mean: n ? mean : NaN,
+    sd: n > 1 ? Math.sqrt(m2 / (n - 1)) : NaN,
+    min: n ? min : NaN,
+    max: n ? max : NaN,
+  };
+}
+
+/** Mean and sample SD of a list of numbers, ignoring non-finite values. */
+export function meanSd(values: number[]): { n: number; mean: number; sd: number } {
+  const s = rangeStats(values, values);
+  return { n: s.n, mean: s.mean, sd: s.sd };
+}
+
+/**
+ * Largest-Triangle-Three-Buckets downsampling. Returns the indices of `threshold` points
+ * that keep the visual shape of the line (peaks and dips survive, unlike striding).
+ */
+export function lttb(x: ArrayLike<number>, y: ArrayLike<number>, threshold: number): number[] {
+  const n = x.length;
+  if (threshold >= n || threshold < 3) return Array.from({ length: n }, (_, i) => i);
+
+  const out = [0];
+  const every = (n - 2) / (threshold - 2);
+  let a = 0;
+  for (let i = 0; i < threshold - 2; i++) {
+    const avgStart = Math.floor((i + 1) * every) + 1;
+    const avgEnd = Math.min(Math.floor((i + 2) * every) + 1, n);
+    let avgX = 0;
+    let avgY = 0;
+    for (let j = avgStart; j < avgEnd; j++) {
+      avgX += x[j];
+      avgY += y[j];
+    }
+    avgX /= avgEnd - avgStart;
+    avgY /= avgEnd - avgStart;
+
+    const start = Math.floor(i * every) + 1;
+    const end = Math.floor((i + 1) * every) + 1;
+    let maxArea = -1;
+    let next = start;
+    for (let j = start; j < end; j++) {
+      const area = Math.abs((x[a] - avgX) * (y[j] - y[a]) - (x[a] - x[j]) * (avgY - y[a]));
+      if (area > maxArea) {
+        maxArea = area;
+        next = j;
+      }
+    }
+    out.push(next);
+    a = next;
+  }
+  out.push(n - 1);
+  return out;
+}
+
+export interface Aggregate {
+  x: number[];
+  mean: number[];
+  sd: number[];
+}
+
+/**
+ * Point-by-point mean ± SD across series (e.g. replica simulations).
+ * Returns null unless every series has the same x values.
+ */
+export function aggregate(list: { x: ArrayLike<number>; y: ArrayLike<number> }[]): Aggregate | null {
+  if (list.length < 2) return null;
+  const x0 = list[0].x;
+  const n = x0.length;
+  for (const s of list) {
+    if (s.x.length !== n || s.y.length !== n) return null;
+    for (let i = 0; i < n; i++) {
+      if (Math.abs(s.x[i] - x0[i]) > 1e-6 * Math.max(1, Math.abs(x0[i]))) return null;
+    }
+  }
+
+  const mean = new Array<number>(n);
+  const sd = new Array<number>(n);
+  const column = new Array<number>(list.length);
+  for (let i = 0; i < n; i++) {
+    for (let k = 0; k < list.length; k++) column[k] = list[k].y[i];
+    const s = meanSd(column);
+    mean[i] = s.mean;
+    sd[i] = s.sd;
+  }
+  return { x: Array.from(x0), mean, sd };
+}
+
+function finiteSlice(x: ArrayLike<number>, y: ArrayLike<number>, maxPoints: number) {
+  const stride = Math.max(1, Math.ceil(y.length / maxPoints));
+  const xs: number[] = [];
+  const ys: number[] = [];
+  const index: number[] = [];
+  for (let i = 0; i < y.length; i += stride) {
+    if (Number.isFinite(y[i]) && Number.isFinite(x[i])) {
+      xs.push(x[i]);
+      ys.push(y[i]);
+      index.push(i);
+    }
+  }
+  return { xs, ys, index };
+}
+
+/**
+ * Statistical inefficiency g = 1 + 2 Σ (1 − t/N) C(t), the number of correlated samples per
+ * independent one. Follows pymbar's statisticalInefficiency(fast=True): the sum stops once the
+ * autocorrelation C(t) drops to zero, and the lag grows in increasing steps.
+ */
+export function statisticalInefficiency(y: ArrayLike<number>, start = 0, end = y.length): number {
+  const n = end - start;
+  if (n < 3) return 1;
+  let mean = 0;
+  for (let i = start; i < end; i++) mean += y[i];
+  mean /= n;
+  let variance = 0;
+  for (let i = start; i < end; i++) variance += (y[i] - mean) ** 2;
+  variance /= n;
+  if (!(variance > 0)) return 1;
+
+  let g = 1;
+  let t = 1;
+  let increment = 1;
+  while (t < n - 1) {
+    let c = 0;
+    for (let i = start; i < end - t; i++) c += (y[i] - mean) * (y[i + t] - mean);
+    c /= (n - t) * variance;
+    if (c <= 0 && t > 3) break;
+    g += 2 * c * (1 - t / n) * increment;
+    t += increment;
+    increment++;
+  }
+  return Math.max(1, g);
+}
+
+export interface Equilibration {
+  /** Index into the original arrays where production starts. */
+  start: number;
+  /** Effective number of uncorrelated samples after `start`. */
+  neff: number;
+}
+
+/**
+ * Automated equilibration detection (Chodera, J. Chem. Theory Comput. 2016, 12, 1799):
+ * choose the start of production that maximises the number of uncorrelated samples left.
+ * Works on at most `maxPoints` evenly strided frames so it stays fast on long runs.
+ */
+export function detectEquilibration(x: ArrayLike<number>, y: ArrayLike<number>, maxPoints = 1000, candidates = 60): Equilibration {
+  const { ys, index } = finiteSlice(x, y, maxPoints);
+  const m = ys.length;
+  if (m < 10) return { start: 0, neff: m };
+  const minProduction = Math.max(5, Math.floor(m * 0.1));
+  const step = Math.max(1, Math.floor(m / candidates));
+  let best: Equilibration = { start: 0, neff: -1 };
+  for (let k = 0; m - k >= minProduction; k += step) {
+    const neff = (m - k) / statisticalInefficiency(ys, k, m);
+    if (neff > best.neff) best = { start: index[k], neff };
+  }
+  return best;
+}
+
+export interface Summary extends RangeStats {
+  /** First x value of the production region. */
+  from: number;
+  /** Fraction of the run before production (0 when a manual range starts at the beginning). */
+  equilibrationFraction: number;
+  /** Standard error of the mean, corrected for autocorrelation. */
+  se: number;
+  /** Linear trend over the production region, in y units per x unit. */
+  slope: number;
+}
+
+/**
+ * Production-region statistics. Without a range the region starts at the automatically
+ * detected end of equilibration.
+ */
+export function summarize(x: ArrayLike<number>, y: ArrayLike<number>, range?: { from: number; to: number }): Summary {
+  let from: number;
+  let to = Infinity;
+  if (range) {
+    from = range.from;
+    to = range.to;
+  } else {
+    const eq = detectEquilibration(x, y);
+    from = x[eq.start] ?? -Infinity;
+  }
+  const stats = rangeStats(x, y, from, to);
+
+  const prodX: number[] = [];
+  const prodY: number[] = [];
+  for (let i = 0; i < y.length; i++) {
+    if (x[i] >= from && x[i] <= to && Number.isFinite(y[i])) {
+      prodX.push(x[i]);
+      prodY.push(y[i]);
+    }
+  }
+  const sample = finiteSlice(prodX, prodY, 5000);
+  const g = statisticalInefficiency(sample.ys);
+  const se = stats.n > 1 ? stats.sd * Math.sqrt(g / sample.ys.length) : NaN;
+
+  let sx = 0;
+  let sy = 0;
+  for (let i = 0; i < sample.xs.length; i++) {
+    sx += sample.xs[i];
+    sy += sample.ys[i];
+  }
+  const k = sample.xs.length;
+  let sxy = 0;
+  let sxx = 0;
+  for (let i = 0; i < k; i++) {
+    sxy += (sample.xs[i] - sx / k) * (sample.ys[i] - sy / k);
+    sxx += (sample.xs[i] - sx / k) ** 2;
+  }
+
+  let x0 = Infinity;
+  let x1 = -Infinity;
+  for (let i = 0; i < x.length; i++) {
+    if (x[i] < x0) x0 = x[i];
+    if (x[i] > x1) x1 = x[i];
+  }
+  const start = Number.isFinite(from) ? Math.max(from, x0) : x0;
+  return {
+    ...stats,
+    from: start,
+    equilibrationFraction: x1 > x0 ? (start - x0) / (x1 - x0) : 0,
+    se,
+    slope: sxx > 0 ? sxy / sxx : NaN,
+  };
+}

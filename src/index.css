@@ -1,0 +1,65 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg: 247 248 250;
+  --surface: 255 255 255;
+  --raised: 240 242 246;
+  --line: 225 228 235;
+  --ink: 17 20 28;
+  --muted: 100 108 124;
+  --accent: 91 76 255;
+  --accent-2: 0 170 210;
+  --ok: 5 150 105;
+  --warn: 202 110 4;
+  color-scheme: light;
+}
+
+.dark {
+  --bg: 10 11 15;
+  --surface: 18 20 26;
+  --raised: 27 30 38;
+  --line: 39 43 54;
+  --ink: 236 238 243;
+  --muted: 142 149 164;
+  --accent: 141 128 255;
+  --accent-2: 34 211 238;
+  --ok: 52 211 153;
+  --warn: 251 191 36;
+  color-scheme: dark;
+}
+
+html,
+body {
+  background: rgb(var(--bg));
+  color: rgb(var(--ink));
+}
+
+body {
+  font-family: "Inter Variable", system-ui, sans-serif;
+  font-feature-settings: "cv11", "ss01", "ss03";
+  -webkit-font-smoothing: antialiased;
+}
+
+.figure-host svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.dots {
+  background-image: radial-gradient(rgb(var(--line)) 1px, transparent 1px);
+  background-size: 18px 18px;
+}
+
+.text-gradient {
+  background: linear-gradient(100deg, rgb(var(--accent)), rgb(var(--accent-2)));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+input[type="range"] {
+  accent-color: rgb(var(--accent));
+}
