@@ -1,5 +1,5 @@
 import type { FigureBand, FigureLine, FigurePanel, FigureRule } from "./figure";
-import { aggregate, histogram, kde, lttb, movingAverage, type Summary } from "./stats";
+import { aggregate, histogram, kde, lttb, movingAverage, type Histogram, type Kde, type Summary } from "./stats";
 import { PALETTE, type Panel } from "./workspace";
 
 const MAX_POINTS = 2500;
@@ -72,17 +72,23 @@ export function panelToFigure(panel: Panel, yLabel: string, o: FigureOptions): {
   return { figure: { yLabel, lines, bands, rules }, aggregateFailed: o.aggregate && panel.series.length >= 2 && !agg };
 }
 
-/**
- * Distribution of each series over its production region: a kernel density estimate drawn as
- * a line, over a faint histogram outline. `range` overrides the per-series production region.
- */
-export function panelToDistribution(
-  panel: Panel,
-  valueLabel: string,
-  o: { summaries: Map<string, Summary>; range: { from: number; to: number } | null; showHistogram: boolean },
-): FigurePanel {
-  const lines: FigureLine[] = [];
-  for (const s of panel.series) {
+export interface SeriesDistribution {
+  name: string;
+  color: string;
+  dash?: string;
+  histogram: Histogram;
+  kde: Kde | null;
+}
+
+export interface DistributionOptions {
+  summaries: Map<string, Summary>;
+  /** Overrides the per-series production region (manual range). */
+  range: { from: number; to: number } | null;
+}
+
+/** Histogram and kernel density of each series over its production region. */
+export function distributionOf(panel: Panel, o: DistributionOptions): SeriesDistribution[] {
+  return panel.series.map((s) => {
     const summary = o.summaries.get(s.id) ?? s.summary;
     const from = o.range?.from ?? summary.from;
     const to = o.range?.to ?? s.unstableFrom ?? Infinity;
@@ -91,18 +97,32 @@ export function panelToDistribution(
       // The unstable point itself is excluded, matching the statistics.
       if (s.x[i] >= from && (o.range ? s.x[i] <= to : s.x[i] < to)) values.push(s.y[i]);
     }
+    return { name: s.name, color: s.color, dash: s.dash, histogram: histogram(values), kde: kde(values) };
+  });
+}
+
+/**
+ * Distribution of each series over its production region: a kernel density estimate drawn as
+ * a line, over a faint histogram outline.
+ */
+export function panelToDistribution(
+  panel: Panel,
+  valueLabel: string,
+  o: DistributionOptions & { showHistogram: boolean },
+): FigurePanel {
+  const lines: FigureLine[] = [];
+  for (const d of distributionOf(panel, o)) {
     if (o.showHistogram) {
-      const h = histogram(values);
+      const h = d.histogram;
       const x: number[] = [];
       const y: number[] = [];
-      h.density.forEach((d, i) => {
+      h.density.forEach((v, i) => {
         x.push(h.edges[i], h.edges[i + 1]);
-        y.push(d, d);
+        y.push(v, v);
       });
-      lines.push({ name: s.name, color: s.color, x: [h.edges[0], ...x, h.edges.at(-1)!], y: [0, ...y, 0], opacity: 0.35, legend: false });
+      lines.push({ name: d.name, color: d.color, x: [h.edges[0], ...x, h.edges.at(-1)!], y: [0, ...y, 0], opacity: 0.35, legend: false });
     }
-    const k = kde(values);
-    if (k) lines.push({ name: s.name, color: s.color, x: k.x, y: k.density, dash: s.dash });
+    if (d.kde) lines.push({ name: d.name, color: d.color, x: d.kde.x, y: d.kde.density, dash: d.dash });
   }
   if (lines.filter((l) => l.legend !== false).length === 1) lines.forEach((l) => (l.legend = false));
   return { yLabel: "Probability density", xLabel: valueLabel, lines, bands: [], rules: [] };

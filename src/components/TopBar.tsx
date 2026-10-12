@@ -24,7 +24,9 @@ export function TopBar({ theme, onTheme, onOpen, onHome }: { theme: ThemeMode; o
         <button type="button" onClick={onHome} className="flex items-center gap-2.5" aria-label="MDLens home">
           <Logo />
           <span className="text-[15px] font-semibold tracking-tight text-ink">MDLens</span>
-          <span className="rounded-full border border-line px-1.5 py-px text-[10px] font-semibold uppercase tracking-wider text-muted">beta</span>
+          <span title={`Version ${__APP_VERSION__}`} className="rounded-full border border-line px-1.5 py-px text-[10px] font-semibold uppercase tracking-wider text-muted">
+            v{__APP_VERSION__.split(".").slice(0, 2).join(".")} beta
+          </span>
         </button>
         <div className="flex-1" />
         <span className="hidden items-center gap-1.5 rounded-full border border-line px-2.5 py-1 text-[12px] text-muted md:inline-flex" title="Files are read by your browser. Nothing is uploaded.">

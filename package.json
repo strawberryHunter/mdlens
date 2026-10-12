@@ -1,7 +1,7 @@
 {
   "name": "mdlens",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.3.0",
   "description": "Drop any MD log and get equilibration-aware, publication-ready plots in your browser.",
   "type": "module",
   "scripts": {

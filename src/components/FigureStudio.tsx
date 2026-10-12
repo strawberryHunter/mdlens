@@ -17,6 +17,8 @@ export function FigureStudio({
   baseName,
   aggregateFailed,
   excluded,
+  software,
+  distributionCsv,
   notify,
 }: {
   spec: FigureSpec;
@@ -29,6 +31,9 @@ export function FigureStudio({
   baseName: string;
   aggregateFailed: boolean;
   excluded: ExcludedFile[];
+  /** Recorded in exported PNGs (tEXt "Software"). */
+  software: string;
+  distributionCsv: () => string;
   notify: (message: string) => void;
 }) {
   const hostRef = useRef<HTMLDivElement>(null);
@@ -46,7 +51,7 @@ export function FigureStudio({
   async function png(dpi: number) {
     if (!svgRef.current) return;
     try {
-      downloadBlob(await svgToPng(svgRef.current, spec.widthIn, heightIn, dpi), `${baseName}_${dpi}dpi.png`);
+      downloadBlob(await svgToPng(svgRef.current, spec.widthIn, heightIn, dpi, software), `${baseName}_${dpi}dpi.png`);
     } catch (err) {
       notify(`PNG export failed: ${(err as Error).message}`);
     }
@@ -60,7 +65,7 @@ export function FigureStudio({
   async function copy() {
     if (!svgRef.current) return;
     try {
-      await copyPng(svgRef.current, spec.widthIn, heightIn);
+      await copyPng(svgRef.current, spec.widthIn, heightIn, 300, software);
       notify("Copied a 300 dpi PNG. Paste it into PowerPoint, Keynote or Docs.");
     } catch (err) {
       notify(`Copy failed: ${(err as Error).message}`);
@@ -68,6 +73,10 @@ export function FigureStudio({
   }
 
   function csv() {
+    if (view === "distribution") {
+      downloadBlob(new Blob([distributionCsv()], { type: "text/csv" }), `${baseName}_distribution.csv`);
+      return;
+    }
     const series = panels.flatMap((p) => p.series.map((s) => ({ ...s, name: panels.length > 1 ? `${s.name} · ${p.yLabel}` : s.name })));
     downloadBlob(new Blob([toCsv(series, spec.xLabel, panels.length === 1 ? panels[0].yLabel : "value")], { type: "text/csv" }), `${baseName}.csv`);
   }

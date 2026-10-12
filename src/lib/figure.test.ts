@@ -66,6 +66,12 @@ describe("buildFigure", () => {
     expect(ty).toBeLessThan(240 / 2);
   });
 
+  it("records the credit in an SVG <desc>", () => {
+    const svg = buildFigure({ ...base, credit: "MDLens v0.3.0" });
+    expect(svg.querySelector("desc")?.textContent).toBe("MDLens v0.3.0");
+    expect(buildFigure(base).querySelector("desc")).toBeNull();
+  });
+
   it("adds a title and hides the legend on request", () => {
     expect(texts(buildFigure({ ...base, title: "Backbone RMSD" }))).toContain("Backbone RMSD");
     expect(texts(buildFigure({ ...base, legend: "none" }))).not.toContain("rep 1");

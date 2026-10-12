@@ -83,6 +83,10 @@ src/lib/export.ts  SVG / PNG (with DPI) / CSV export
 
 Block-averaging error analysis, histograms and distributions, `.xpm` heat maps (free-energy landscapes, DSSP), GROMACS `.edr` reading, session save/restore.
 
+## Contributing
+
+Files that MDLens reads wrongly are the most useful bug reports; see [CONTRIBUTING.md](CONTRIBUTING.md). Changes are listed in [CHANGELOG.md](CHANGELOG.md). Exported SVG and PNG files record the MDLens version that made them.
+
 ## License
 
 [MIT](LICENSE)

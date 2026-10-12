@@ -10,20 +10,24 @@ import { StatsTable, type StatsGroup } from "./components/StatsTable";
 import { TopBar } from "./components/TopBar";
 import { Segmented, Switch, cx, inputClass } from "./components/ui";
 import type { FigureSpec } from "./lib/figure";
-import { panelToDistribution, panelToFigure } from "./lib/figureData";
-import { ACCEPT, parseFile } from "./lib/formats/detect";
+import { distributionOf, panelToDistribution, panelToFigure } from "./lib/figureData";
+import { distributionCsv } from "./lib/export";
+import { ACCEPT } from "./lib/formats/detect";
+import { readFilesAsync } from "./lib/readFilesClient";
 import { summarize, type Summary } from "./lib/stats";
 import { dimensionOf } from "./lib/units";
 import { buildCatalog, buildPanels, loadFile, PALETTE, type Category, type LoadedFile } from "./lib/workspace";
 import { PRESETS, useSettings, useTheme } from "./settings";
 
-// Per-atom output (e.g. gmx traj -of) can have millions of columns; that is not a plot.
-const MAX_QUANTITIES = 200;
-
 let nextId = 0;
+const CREDIT = `MDLens v${__APP_VERSION__} (https://strawberryhunter.github.io/mdlens/)`;
 
 export default function App() {
   const [files, setFiles] = useState<LoadedFile[]>([]);
+  // Latest files, also between renders: loads finish asynchronously and may overlap.
+  const filesRef = useRef(files);
+  filesRef.current = files;
+  const [busy, setBusy] = useState(0);
   const [selected, setSelected] = useState<string[]>([]);
   const [settings, set] = useSettings();
   const [theme, setTheme] = useTheme();
@@ -55,39 +59,34 @@ export default function App() {
   const catalog = useMemo(() => buildCatalog(files), [files]);
   const units = settings.units;
 
-  function load(incoming: { name: string; text: string }[]) {
-    const added: LoadedFile[] = [];
-    const rejected: string[] = [];
-    for (const { name, text } of incoming) {
-      let dataset;
-      try {
-        dataset = parseFile(name, text);
-      } catch (err) {
-        console.error(`Failed to parse ${name}`, err);
-        rejected.push(`${name}: could not be read (${(err as Error).message})`);
-        continue;
-      }
-      if (!dataset.quantities.length) rejected.push(`${name}: no data recognised`);
-      else if (dataset.quantities.length > MAX_QUANTITIES) rejected.push(`${name}: ${dataset.quantities.length.toLocaleString()} columns (per-atom output)`);
-      else added.push(loadFile(`f${nextId++}`, name, dataset, PALETTE[(files.length + added.length) % PALETTE.length]));
-    }
-    if (rejected.length) setNotice(`Skipped ${rejected.join("; ")}`);
-    if (!added.length) return;
-    // Opening files from the guide goes back to the app to show them.
-    if (window.location.hash.startsWith("#guide")) window.location.hash = "";
-    const next = [...files, ...added];
-    setFiles(next);
-    // Start with the most informative quantity plotted, so there is a figure right away.
-    if (!selected.length) {
+  async function load(incoming: { name: string; text: string }[]) {
+    setBusy((b) => b + incoming.length);
+    try {
+      const results = await readFilesAsync(incoming);
+      const rejected = results.flatMap((r) => (r.ok ? [] : [`${r.name}: ${r.error}`]));
+      if (rejected.length) setNotice(`Skipped ${rejected.join("; ")}`);
+      const prev = filesRef.current;
+      const added = results.flatMap((r, i) =>
+        r.ok ? [loadFile(`f${nextId++}`, r.name, r.dataset, PALETTE[(prev.length + i) % PALETTE.length], r.analysis)] : [],
+      );
+      if (!added.length) return;
+      // Opening files from the guide goes back to the app to show them.
+      if (window.location.hash.startsWith("#guide")) window.location.hash = "";
+      const next = [...prev, ...added];
+      filesRef.current = next;
+      setFiles(next);
+      // Start with the most informative quantity plotted, so there is a figure right away.
       const first = buildCatalog(next).find((e) => !e.constant);
-      if (first) setSelected([first.key]);
+      if (first) setSelected((sel) => (sel.length ? sel : [first.key]));
+    } finally {
+      setBusy((b) => b - incoming.length);
     }
   }
 
   async function loadFileList(list: FileList | null) {
     if (!list?.length) return;
     try {
-      load(await Promise.all([...list].map(async (f) => ({ name: f.name, text: await f.text() }))));
+      await load(await Promise.all([...list].map(async (f) => ({ name: f.name, text: await f.text() }))));
     } catch (err) {
       console.error("Failed to read files", err);
       setNotice(`Could not read the files: ${(err as Error).message}`);
@@ -104,7 +103,7 @@ export default function App() {
           return { name, text: await res.text() };
         }),
       );
-      load(fetched);
+      await load(fetched);
     } catch (err) {
       console.error("Failed to load samples", err);
       setNotice(`Could not load the sample files: ${(err as Error).message}`);
@@ -200,6 +199,7 @@ export default function App() {
       legend: settings.legend,
       panelLabels: settings.panelLabels,
       independentX: distribution,
+      credit: CREDIT,
     };
     return { spec, aggregateFailed: failed };
   }, [panels, settings, summaries, autoXLabel, manual, xExtent, from, to]);
@@ -314,6 +314,15 @@ export default function App() {
                   baseName={baseName}
                   aggregateFailed={aggregateFailed}
                   excluded={excluded}
+                  software={CREDIT}
+                  distributionCsv={() =>
+                    distributionCsv(
+                      panels.map((p) => ({
+                        quantity: settings.yLabels[p.id] || p.yLabel,
+                        series: distributionOf(p, { summaries, range: manual ? { from, to } : null }),
+                      })),
+                    )
+                  }
                   notify={setNotice}
                 />
                 <StatsTable groups={statsGroups} timeUnit={timeUnit} manual={manual} onCopy={copyText} />
@@ -382,7 +391,13 @@ export default function App() {
           </div>
         </div>
       )}
-      {notice && (
+      {busy > 0 && (
+        <div role="status" className="fixed bottom-6 left-1/2 z-50 flex -translate-x-1/2 items-center gap-2 rounded-xl bg-ink px-4 py-2.5 text-[13px] text-bg shadow-lift">
+          <span className="size-3.5 animate-spin rounded-full border-2 border-bg/30 border-t-bg" />
+          Reading {busy} {busy === 1 ? "file" : "files"}…
+        </div>
+      )}
+      {notice && busy === 0 && (
         <div role="status" className="fixed bottom-6 left-1/2 z-50 max-w-[calc(100vw-32px)] -translate-x-1/2 animate-fade-up rounded-xl bg-ink px-4 py-2.5 text-[13px] text-bg shadow-lift">
           {notice}
         </div>

@@ -1,0 +1,43 @@
+name: A file is read wrongly
+description: MDLens does not recognise a file, or gets values, units or names wrong.
+labels: ["parser"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Files that break MDLens are the most useful reports. Please attach the file (or a cut-down copy) so the problem can be reproduced and turned into a test.
+        Remove anything confidential first. MDLens itself never uploads your files; attaching one here makes it public.
+  - type: dropdown
+    id: engine
+    attributes:
+      label: Engine
+      options:
+        - GROMACS
+        - NAMD
+        - OpenMM
+        - CHARMM
+        - LAMMPS
+        - AMBER
+        - PLUMED
+        - Other / not sure
+    validations:
+      required: true
+  - type: input
+    id: engine-version
+    attributes:
+      label: Engine version and command, if known
+      placeholder: e.g. GROMACS 2024.2, gmx energy; AMBER 22 pmemd.cuda
+  - type: textarea
+    id: what
+    attributes:
+      label: What went wrong
+      description: What did MDLens show (a note, a wrong value, nothing), and what did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: file
+    attributes:
+      label: The file
+      description: Drag the file here (zip it if GitHub refuses the extension), or paste the header and a few data lines.
+    validations:
+      required: true

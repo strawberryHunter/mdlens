@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Guide
+    url: https://strawberryhunter.github.io/mdlens/#guide
+    about: How to use MDLens, what the card statuses mean, and how the statistics work.

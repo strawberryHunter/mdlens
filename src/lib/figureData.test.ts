@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { panelToDistribution, panelToFigure, type FigureOptions } from "./figureData";
+import { distributionOf, panelToDistribution, panelToFigure, type FigureOptions } from "./figureData";
 import type { Summary } from "./stats";
 import type { Panel, PlotSeries } from "./workspace";
 
@@ -98,5 +98,14 @@ describe("panelToDistribution", () => {
 
   it("skips the histogram when raw data are hidden", () => {
     expect(panelToDistribution(panel(s), "T", { summaries: new Map(), range: null, showHistogram: false }).lines).toHaveLength(1);
+  });
+});
+
+describe("distributionOf", () => {
+  it("counts exactly the production frames", () => {
+    const s = { ...series("a", 400), summary: summary(100, 0.25), unstableFrom: 350 };
+    const [d] = distributionOf(panel(s), { summaries: new Map(), range: null });
+    expect(d.histogram.counts.reduce((a, b) => a + b, 0)).toBe(250);
+    expect(d.kde).not.toBeNull();
   });
 });

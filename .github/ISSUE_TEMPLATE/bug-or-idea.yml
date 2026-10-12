@@ -1,0 +1,21 @@
+name: Bug or idea
+description: Something in the app misbehaves, or a feature would help your work.
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, or what would help
+      description: For a bug, include the steps to reproduce it. For an idea, describe the analysis or figure you want to make.
+    validations:
+      required: true
+  - type: input
+    id: browser
+    attributes:
+      label: Browser and operating system
+      placeholder: e.g. Chrome 141 on macOS 15
+  - type: input
+    id: version
+    attributes:
+      label: MDLens version
+      description: Shown next to the logo, and recorded in exported SVG and PNG files.
+      placeholder: e.g. v0.3.0

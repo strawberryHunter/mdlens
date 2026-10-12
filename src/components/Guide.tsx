@@ -182,7 +182,8 @@ export function Guide({ onBack }: { onBack: () => void }) {
 
         <Card className="mt-10 p-5">
           <p className="text-[13.5px] text-muted">
-            MDLens is open source under the MIT licence. It runs entirely in your browser: nothing you open is sent anywhere.
+            MDLens v{__APP_VERSION__} is open source under the MIT licence. It runs entirely in your browser: nothing you open is sent anywhere.
+            Exported SVG and PNG files record the version that made them.
           </p>
         </Card>
       </article>

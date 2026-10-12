@@ -63,6 +63,8 @@ export interface FigureSpec {
   panelLabels: boolean;
   /** Give every panel its own x axis (e.g. distributions of different quantities). */
   independentX?: boolean;
+  /** Written into the SVG as <desc>, e.g. the program and version that made it. */
+  credit?: string;
   /** Render outside a browser (jsdom in tests and scripts). Text is then measured approximately. */
   document?: Document;
 }
@@ -190,6 +192,7 @@ export function buildFigure(spec: FigureSpec): SVGSVGElement {
     "font-family": FONT_FAMILY,
     "font-size": fs,
   }) as SVGSVGElement;
+  if (spec.credit) root.append(el("desc", {}, spec.credit));
   root.append(el("rect", { width, height, fill: "#fff" }));
 
   if (spec.title) {

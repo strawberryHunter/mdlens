@@ -58,7 +58,14 @@ const PRIORITY = [
 
 export const isTimeAxis = (d: Dataset) => dimensionOf(d.xUnit) === "time";
 
-export function loadFile(id: string, name: string, dataset: Dataset, color: string): LoadedFile {
+/** What loading works out about a dataset; the expensive part, so it can run in a worker. */
+export interface Analysis {
+  notes: string[];
+  unstableFrom: number | null;
+  summaries: Summary[];
+}
+
+export function analyzeDataset(dataset: Dataset): Analysis {
   const whole = { from: -Infinity, to: Infinity };
   const time = isTimeAxis(dataset);
   const instability = time ? findInstability(dataset) : null;
@@ -70,16 +77,28 @@ export function loadFile(id: string, name: string, dataset: Dataset, color: stri
   }
   const until = instability?.from ?? Infinity;
   return {
+    notes,
+    unstableFrom: instability?.from ?? null,
+    // Equilibration only means something along time.
+    summaries: dataset.quantities.map((q) => summarize(q.x, q.y, time ? undefined : whole, until)),
+  };
+}
+
+export function loadFile(
+  id: string,
+  name: string,
+  dataset: Dataset,
+  color: string,
+  analysis: Analysis = analyzeDataset(dataset),
+): LoadedFile {
+  return {
     id,
     name,
     label: name.replace(/\.(xvg|log|out|mdout|csv|dat|txt|colvar)$/i, ""),
     color,
     visible: true,
     dataset,
-    notes,
-    unstableFrom: instability?.from ?? null,
-    // Equilibration only means something along time.
-    summaries: dataset.quantities.map((q) => summarize(q.x, q.y, time ? undefined : whole, until)),
+    ...analysis,
   };
 }
 
