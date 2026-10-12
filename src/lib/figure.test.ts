@@ -80,6 +80,28 @@ describe("buildFigure", () => {
     expect(t.filter((s) => s === "rep 1")).toHaveLength(1);
   });
 
+  it("gives every panel its own labelled x axis when independentX is on", () => {
+    const a: FigurePanel = { yLabel: "Density", xLabel: "Temperature (K)", lines: [{ name: "", color: "#000", x: [290, 310], y: [0, 1] }], bands: [], rules: [] };
+    const b: FigurePanel = { yLabel: "Density", xLabel: "Pressure (bar)", lines: [{ name: "", color: "#000", x: [-500, 500], y: [0, 1] }], bands: [], rules: [] };
+    const t = texts(buildFigure({ ...base, panels: [a, b], independentX: true }));
+    expect(t).toEqual(expect.arrayContaining(["Temperature (K)", "Pressure (bar)", "290", "−400"]));
+  });
+
+  it("shrinks a y label that is longer than its panel and keeps panel letters above the plots", () => {
+    const long: FigurePanel = { ...rmsd, yLabel: "A very long y axis label (kcal/mol) that cannot fit", rules: [] };
+    const svg = buildFigure({ ...base, panels: [rmsd, long] });
+    const label = [...svg.querySelectorAll("text")].find((t) => t.textContent === long.yLabel)!;
+    expect(Number(label.getAttribute("font-size"))).toBeLessThan((8 * 96) / 72);
+    // The letter sits in the gap above the second panel's plot area (which starts 1.1 em down).
+    const fs = (8 * 96) / 72;
+    const letterY = Number([...svg.querySelectorAll("text")].find((t) => t.textContent === "b")!.getAttribute("y"));
+    const panelTop = Number(
+      [...svg.children].filter((e) => /^translate\(0,/.test(e.getAttribute("transform") ?? ""))[1].getAttribute("transform")!.match(/,([\d.]+)\)/)![1],
+    );
+    expect(letterY).toBeGreaterThan(panelTop);
+    expect(letterY).toBeLessThan(panelTop + 1.1 * fs);
+  });
+
   it("keeps stacked panels at a readable height", () => {
     expect(figureHeightIn({ heightIn: 2.5, panels: [rmsd] })).toBe(2.5);
     expect(figureHeightIn({ heightIn: 2.5, panels: [rmsd, rmsd, rmsd] })).toBeCloseTo(4.1);

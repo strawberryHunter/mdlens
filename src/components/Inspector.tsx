@@ -2,7 +2,7 @@ import type { LegendPosition } from "../lib/figure";
 import type { UnitPrefs } from "../lib/units";
 import type { Panel } from "../lib/workspace";
 import type { Settings } from "../settings";
-import { Card, Field, NumberInput, Section, Segmented, Switch, cx, inputClass } from "./ui";
+import { Card, Field, FieldGroup, NumberInput, Section, Segmented, Switch, cx, inputClass } from "./ui";
 
 const round6 = (v: number) => String(Number(v.toPrecision(6)));
 
@@ -49,14 +49,14 @@ export function Inspector({
       </Section>
 
       <Section title="Units">
-        <Field label="Time">
+        <FieldGroup label="Time">
           <Segmented
             value={s.units.time}
             onChange={(time) => units({ time })}
             options={(["fs", "ps", "ns", "µs"] as const).map((v) => ({ value: v, label: v }))}
           />
-        </Field>
-        <Field label="Length">
+        </FieldGroup>
+        <FieldGroup label="Length">
           <Segmented
             value={s.units.length}
             onChange={(length) => units({ length })}
@@ -66,8 +66,8 @@ export function Inspector({
               { value: "Å", label: "Å" },
             ]}
           />
-        </Field>
-        <Field label="Energy">
+        </FieldGroup>
+        <FieldGroup label="Energy">
           <Segmented
             value={s.units.energy}
             onChange={(energy) => units({ energy })}
@@ -78,8 +78,8 @@ export function Inspector({
               { value: "eV", label: "eV" },
             ]}
           />
-        </Field>
-        <Field label="Pressure">
+        </FieldGroup>
+        <FieldGroup label="Pressure">
           <Segmented
             value={s.units.pressure}
             onChange={(pressure) => units({ pressure })}
@@ -89,7 +89,7 @@ export function Inspector({
               { value: "atm", label: "atm" },
             ]}
           />
-        </Field>
+        </FieldGroup>
       </Section>
 
       <Section title="Data">

@@ -2,6 +2,7 @@ import { Search, Upload } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import { FigureStudio } from "./components/FigureStudio";
 import { FileRail } from "./components/FileRail";
+import { Guide } from "./components/Guide";
 import { Inspector } from "./components/Inspector";
 import { Landing } from "./components/Landing";
 import { QuantityCard } from "./components/QuantityCard";
@@ -9,7 +10,7 @@ import { StatsTable, type StatsGroup } from "./components/StatsTable";
 import { TopBar } from "./components/TopBar";
 import { Segmented, Switch, cx, inputClass } from "./components/ui";
 import type { FigureSpec } from "./lib/figure";
-import { panelToFigure } from "./lib/figureData";
+import { panelToDistribution, panelToFigure } from "./lib/figureData";
 import { ACCEPT, parseFile } from "./lib/formats/detect";
 import { summarize, type Summary } from "./lib/stats";
 import { dimensionOf } from "./lib/units";
@@ -32,6 +33,18 @@ export default function App() {
   const [dragging, setDragging] = useState(false);
   const [notice, setNotice] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
+  const [guide, setGuide] = useState(() => window.location.hash.startsWith("#guide"));
+
+  // The guide is a page of its own at #guide; files stay loaded while it is open.
+  useEffect(() => {
+    const onHash = () => {
+      const open = window.location.hash.startsWith("#guide");
+      setGuide(open);
+      if (open && window.location.hash === "#guide") window.scrollTo(0, 0);
+    };
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
+  }, []);
 
   useEffect(() => {
     if (!notice) return;
@@ -60,6 +73,8 @@ export default function App() {
     }
     if (rejected.length) setNotice(`Skipped ${rejected.join("; ")}`);
     if (!added.length) return;
+    // Opening files from the guide goes back to the app to show them.
+    if (window.location.hash.startsWith("#guide")) window.location.hash = "";
     const next = [...files, ...added];
     setFiles(next);
     // Start with the most informative quantity plotted, so there is a figure right away.
@@ -150,7 +165,15 @@ export default function App() {
 
   const { spec, aggregateFailed } = useMemo(() => {
     let failed = false;
+    const distribution = settings.view === "distribution";
     const figurePanels = panels.map((p) => {
+      if (distribution) {
+        return panelToDistribution(p, settings.yLabels[p.id] || p.yLabel, {
+          summaries,
+          range: manual ? { from, to } : null,
+          showHistogram: settings.showRaw,
+        });
+      }
       const { figure, aggregateFailed } = panelToFigure(p, settings.yLabels[p.id] || p.yLabel, {
         smooth: settings.smooth,
         showRaw: settings.showRaw,
@@ -170,12 +193,13 @@ export default function App() {
       xLabel: settings.xLabel || autoXLabel,
       title: settings.title,
       panels: figurePanels,
-      highlight: manual && settings.shade && xExtent ? [Math.max(from, xExtent[0]), Math.min(to, xExtent[1])] : null,
+      highlight: !distribution && manual && settings.shade && xExtent ? [Math.max(from, xExtent[0]), Math.min(to, xExtent[1])] : null,
       yFromZero: settings.yFromZero,
       frame: settings.frame,
       grid: settings.grid,
       legend: settings.legend,
       panelLabels: settings.panelLabels,
+      independentX: distribution,
     };
     return { spec, aggregateFailed: failed };
   }, [panels, settings, summaries, autoXLabel, manual, xExtent, from, to]);
@@ -235,7 +259,11 @@ export default function App() {
       }}
       onDrop={onDrop}
     >
-      <TopBar theme={theme} onTheme={setTheme} onOpen={() => inputRef.current?.click()} onHome={reset} />
+      <TopBar theme={theme} onTheme={setTheme} onOpen={() => inputRef.current?.click()} onHome={() => {
+          reset();
+          if (guide) window.location.hash = "";
+        }}
+      />
       <input
         ref={inputRef}
         type="file"
@@ -248,7 +276,9 @@ export default function App() {
         }}
       />
 
-      {files.length === 0 ? (
+      {guide ? (
+        <Guide onBack={() => (window.location.hash = "")} />
+      ) : files.length === 0 ? (
         <Landing onBrowse={() => inputRef.current?.click()} onSample={loadSamples} />
       ) : (
         <div
@@ -274,6 +304,8 @@ export default function App() {
                   spec={spec}
                   panels={panels}
                   presetId={presetId}
+                  view={settings.view}
+                  onView={(view) => set({ view })}
                   onPreset={(id) => {
                     const p = PRESETS.find((x) => x.id === id);
                     if (p) set({ widthIn: p.widthIn, heightIn: p.heightIn, fontPt: p.fontPt, lineWidthPt: p.lineWidthPt });

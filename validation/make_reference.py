@@ -13,8 +13,11 @@ import math
 from pathlib import Path
 
 import numpy as np
+import pyblock
 import pymbar
+import scipy
 from pymbar import timeseries
+from scipy.stats import gaussian_kde
 
 ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / "src" / "lib" / "__fixtures__" / "pymbar_reference.json"
@@ -62,6 +65,8 @@ result = {
     "generator": "validation/make_reference.py",
     "pymbar": pymbar.__version__,
     "numpy": np.__version__,
+    "scipy": scipy.__version__,
+    "pyblock": getattr(pyblock, "__version__", "0.6"),
     "cases": {},
 }
 
@@ -82,7 +87,26 @@ for name, series in cases.items():
         # Same definition MDLens uses: sample SD times sqrt(g / N).
         "production_se": float(production.std(ddof=1) * math.sqrt(g_production / production.size)),
     }
-    print(f"{name:26s} n={y.size:5d}  g_fast={result['cases'][name]['g_fast']:8.3f}  t0={t0:5d}  Neff={neff:8.1f}")
+
+    # Blocking analysis of the production region (pyblock).
+    stats = pyblock.blocking.reblock(production)
+    optimal = pyblock.blocking.find_optimal_block(production.size, stats)[0]
+    result["cases"][name]["block_levels_se"] = [float(st.std_err) for st in stats]
+    result["cases"][name]["block_optimal"] = None if math.isnan(optimal) else int(optimal)
+    result["cases"][name]["block_se"] = None if math.isnan(optimal) else float(stats[optimal].std_err)
+
+    # Distribution of the production region.
+    density, edges = np.histogram(production, bins="auto", density=True)
+    result["cases"][name]["hist_edges"] = edges.tolist()
+    result["cases"][name]["hist_density"] = density.tolist()
+    kernel = gaussian_kde(production)  # Scott's rule
+    bandwidth = float(kernel.factor * production.std(ddof=1))
+    grid = np.linspace(production.min() - 3 * bandwidth, production.max() + 3 * bandwidth, 200)
+    result["cases"][name]["kde_bandwidth"] = bandwidth
+    result["cases"][name]["kde_x"] = grid.tolist()
+    result["cases"][name]["kde_density"] = kernel(grid).tolist()
+    c = result["cases"][name]
+    print(f"{name:26s} n={y.size:5d}  g_fast={c['g_fast']:8.3f}  t0={t0:5d}  Neff={neff:8.1f}  block={c['block_optimal']}  bins={len(c['hist_density'])}")
 
 OUT.write_text(json.dumps(result, indent=1) + "\n")
 print(f"Wrote {OUT.relative_to(ROOT)}")

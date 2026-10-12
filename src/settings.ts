@@ -10,6 +10,8 @@ export const PRESETS = [
 ];
 
 export interface Settings {
+  /** Values over time, or their distribution over the production region. */
+  view: "time" | "distribution";
   units: UnitPrefs;
   widthIn: number;
   heightIn: number;
@@ -38,6 +40,7 @@ export interface Settings {
 const { id: _id, label: _label, title: _title, ...firstPreset } = PRESETS[0];
 
 export const DEFAULT_SETTINGS: Settings = {
+  view: "time",
   units: DEFAULT_UNITS,
   ...firstPreset,
   smooth: 0,

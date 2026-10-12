@@ -38,6 +38,8 @@ export interface FigureRule {
 
 export interface FigurePanel {
   yLabel: string;
+  /** x axis label of this panel; used when `independentX` is on. */
+  xLabel?: string;
   lines: FigureLine[];
   bands: FigureBand[];
   rules: FigureRule[];
@@ -59,6 +61,8 @@ export interface FigureSpec {
   legend: LegendPosition;
   /** Bold a, b, c… next to each panel when there are several. */
   panelLabels: boolean;
+  /** Give every panel its own x axis (e.g. distributions of different quantities). */
+  independentX?: boolean;
   /** Render outside a browser (jsdom in tests and scripts). Text is then measured approximately. */
   document?: Document;
 }
@@ -116,7 +120,8 @@ function textMeasurer(px: number, useCanvas: boolean): (s: string) => number {
 }
 
 /**
- * Renders a static, journal-style SVG figure: one or more panels stacked on a shared x axis.
+ * Renders a static, journal-style SVG figure: one or more stacked panels, on a shared x axis
+ * unless `independentX` is set.
  * Sizes are physical (inches, points) so the exported file drops into a manuscript or slide
  * at the intended size.
  */
@@ -138,8 +143,10 @@ export function buildFigure(spec: FigureSpec): SVGSVGElement {
 
   // Vertical layout: title, then panels separated by a gap, then the shared x axis.
   const titleH = spec.title ? fs * 2 : 0;
-  const tops = spec.panels.map((_, i) => (i === 0 ? titleH + fs * 0.9 : fs * 0.6));
-  const bottoms = spec.panels.map((_, i) => (i === n - 1 ? fs * 3.1 : fs * 0.6));
+  const lettered = spec.panelLabels && n > 1;
+  const tops = spec.panels.map((_, i) => (i === 0 ? titleH + fs * (lettered ? 1.3 : 0.9) : fs * (lettered ? 1.1 : 0.6)));
+  const ownX = spec.independentX === true;
+  const bottoms = spec.panels.map((_, i) => (i === n - 1 || ownX ? fs * 3.1 : fs * 0.6));
   const innerH = (height - tops.reduce((a, b) => a + b, 0) - bottoms.reduce((a, b) => a + b, 0)) / n;
 
   // Ticks are computed here, not by Plot, so margins fit them and panels line up.
@@ -154,20 +161,26 @@ export function buildFigure(spec: FigureSpec): SVGSVGElement {
   });
   const marginLeft = Math.ceil(Math.max(...yAxes.map((a) => a.widest)) + fs * 2.6);
 
-  const xDomain = extent(spec.panels.flatMap((p) => p.lines.map((l) => l.x))) ?? [0, 1];
-  const xScale = scaleLinear().domain(xDomain);
-  let marginRight = fs;
-  let xCount = Math.max(2, Math.round((width - marginLeft - marginRight) / (fs * 5)));
-  let xTicks = xScale.ticks(xCount);
-  let xFormat = xScale.tickFormat(xCount);
-  for (;;) {
-    const widest = Math.max(...xTicks.map((t) => measure(xFormat(t))));
-    marginRight = Math.max(fs * 0.8, widest / 2 + 2);
-    if (xCount <= 2 || (widest + fs * 1.2) * xTicks.length <= width - marginLeft - marginRight) break;
-    xCount--;
-    xTicks = xScale.ticks(xCount);
-    xFormat = xScale.tickFormat(xCount);
-  }
+  const xAxisFor = (lines: FigureLine[]) => {
+    const domain = extent(lines.map((l) => l.x)) ?? [0, 1];
+    const scale = scaleLinear().domain(domain);
+    let right = fs;
+    let count = Math.max(2, Math.round((width - marginLeft - right) / (fs * 5)));
+    let ticks = scale.ticks(count);
+    let format = scale.tickFormat(count);
+    for (;;) {
+      const widest = Math.max(...ticks.map((t) => measure(format(t))));
+      right = Math.max(fs * 0.8, widest / 2 + 2);
+      if (count <= 2 || (widest + fs * 1.2) * ticks.length <= width - marginLeft - right) break;
+      count--;
+      ticks = scale.ticks(count);
+      format = scale.tickFormat(count);
+    }
+    return { domain, ticks, format, right };
+  };
+  const shared = ownX ? null : xAxisFor(spec.panels.flatMap((p) => p.lines));
+  const xAxes = spec.panels.map((p) => shared ?? xAxisFor(p.lines));
+  const marginRight = Math.max(...xAxes.map((a) => a.right), fs * 0.8);
 
   const root = el("svg", {
     xmlns: SVG_NS,
@@ -192,6 +205,8 @@ export function buildFigure(spec: FigureSpec): SVGSVGElement {
   let offset = 0;
   spec.panels.forEach((panel, i) => {
     const last = i === n - 1;
+    const { domain: xDomain, ticks: xTicks, format: xFormat } = xAxes[i];
+    const labelled = last || ownX;
     const panelH = tops[i] + innerH + bottoms[i];
     const axis = { labelAnchor: "center", labelArrow: "none", tickSize: fs * 0.4, grid: spec.grid } as const;
     const marks: Plot.Markish[] = [];
@@ -238,8 +253,8 @@ export function buildFigure(spec: FigureSpec): SVGSVGElement {
         ...axis,
         domain: xDomain,
         ticks: xTicks,
-        tickFormat: last ? xFormat : () => "",
-        label: last ? spec.xLabel : null,
+        tickFormat: labelled ? xFormat : () => "",
+        label: labelled ? (ownX ? (panel.xLabel ?? spec.xLabel) : spec.xLabel) : null,
       },
       y: { ...axis, domain: yAxes[i].domain, ticks: yAxes[i].ticks, tickFormat: yAxes[i].format, label: panel.yLabel },
       marks,
@@ -254,6 +269,13 @@ export function buildFigure(spec: FigureSpec): SVGSVGElement {
     }
     g.append(...Array.from(svg.childNodes));
     root.append(g);
+
+    // A y label longer than its panel would spill into the neighbours: shrink it to fit.
+    const yLabelText = g.querySelector('g[aria-label="y-axis label"] text');
+    const yLabelWidth = measure(panel.yLabel);
+    if (yLabelText && yLabelWidth > innerH * 0.96) {
+      yLabelText.setAttribute("font-size", String((fs * innerH * 0.96) / yLabelWidth));
+    }
 
     const entries = panel.lines.filter((l) => l.legend !== false && l.name);
     if (spec.legend !== "none" && entries.length && (i === 0 || !sameLegends)) {
@@ -316,7 +338,7 @@ export function buildFigure(spec: FigureSpec): SVGSVGElement {
 
     if (spec.panelLabels && n > 1) {
       root.append(
-        el("text", { x: fs * 0.2, y: offset + tops[i] + fs * 0.4, "font-weight": "bold", "font-size": fs * 1.15, fill: "#000" }, String.fromCharCode(97 + i)),
+        el("text", { x: fs * 0.2, y: offset + tops[i] - fs * 0.25, "font-weight": "bold", "font-size": fs * 1.15, fill: "#000" }, String.fromCharCode(97 + i)),
       );
     }
     offset += panelH;

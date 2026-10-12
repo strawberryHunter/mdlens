@@ -1,4 +1,4 @@
-import { Github, Lock, Monitor, Moon, Sun, Upload } from "lucide-react";
+import { BookOpen, Github, Lock, Monitor, Moon, Sun, Upload } from "lucide-react";
 import type { ThemeMode } from "../settings";
 import { Button, IconButton } from "./ui";
 
@@ -30,6 +30,9 @@ export function TopBar({ theme, onTheme, onOpen, onHome }: { theme: ThemeMode; o
         <span className="hidden items-center gap-1.5 rounded-full border border-line px-2.5 py-1 text-[12px] text-muted md:inline-flex" title="Files are read by your browser. Nothing is uploaded.">
           <Lock className="size-3" /> Runs locally · nothing uploaded
         </span>
+        <a href="#guide" className="inline-flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-[13px] font-medium text-muted transition-colors hover:bg-raised hover:text-ink">
+          <BookOpen className="size-4" /> <span className="hidden sm:inline">Guide</span>
+        </a>
         <IconButton label={`Theme: ${theme}`} onClick={() => onTheme(NEXT[theme])}>
           <ThemeIcon className="size-4" />
         </IconButton>

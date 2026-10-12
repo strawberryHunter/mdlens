@@ -144,6 +144,7 @@ export function scaleSummary(s: Summary, fy: number, fx: number): Summary {
     mean: s.mean * fy,
     sd: s.sd * fy,
     se: s.se * fy,
+    blockSe: s.blockSe * fy,
     min: s.min * fy,
     max: s.max * fy,
     from: s.from * fx,

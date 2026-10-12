@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { panelToFigure, type FigureOptions } from "./figureData";
+import { panelToDistribution, panelToFigure, type FigureOptions } from "./figureData";
 import type { Summary } from "./stats";
 import type { Panel, PlotSeries } from "./workspace";
 
@@ -13,6 +13,7 @@ const summary = (from: number, equilibrationFraction: number): Summary => ({
   equilibrationFraction,
   se: 0,
   slope: 0,
+  blockSe: 0,
 });
 
 function series(id: string, n: number, x0 = 0): PlotSeries {
@@ -68,5 +69,34 @@ describe("panelToFigure", () => {
     const { figure } = panelToFigure(panel(series("a", 50)), "Custom (K)", options());
     expect(figure.yLabel).toBe("Custom (K)");
     expect(figure.lines.every((l) => l.legend === false)).toBe(true);
+  });
+});
+
+describe("panelToDistribution", () => {
+  const s = { ...series("a", 400), summary: summary(100, 0.25) };
+
+  it("draws a density line over a faint histogram, from the production region only", () => {
+    const fig = panelToDistribution(panel(s), "T (K)", { summaries: new Map(), range: null, showHistogram: true });
+    expect(fig.xLabel).toBe("T (K)");
+    expect(fig.yLabel).toBe("Probability density");
+    const [hist, density] = fig.lines;
+    expect(hist.opacity).toBe(0.35);
+    expect(density.x).toHaveLength(200);
+    // Only y values from x >= 100 can appear in the histogram range.
+    const prod = s.y.slice(100);
+    expect(hist.x[0]).toBeCloseTo(Math.min(...prod));
+    expect(hist.x.at(-1)).toBeCloseTo(Math.max(...prod));
+  });
+
+  it("stops at the unstable point and honours a manual range", () => {
+    const unstable = { ...s, unstableFrom: 200 };
+    const auto = panelToDistribution(panel(unstable), "T", { summaries: new Map(), range: null, showHistogram: true });
+    expect(auto.lines[0].x.at(-1)).toBeCloseTo(Math.max(...s.y.slice(100, 200)));
+    const manual = panelToDistribution(panel(s), "T", { summaries: new Map(), range: { from: 0, to: 49 }, showHistogram: true });
+    expect(manual.lines[0].x.at(-1)).toBeCloseTo(Math.max(...s.y.slice(0, 50)));
+  });
+
+  it("skips the histogram when raw data are hidden", () => {
+    expect(panelToDistribution(panel(s), "T", { summaries: new Map(), range: null, showHistogram: false }).lines).toHaveLength(1);
   });
 });

@@ -231,6 +231,8 @@ export interface Summary extends RangeStats {
   se: number;
   /** Linear trend over the production region, in y units per x unit. */
   slope: number;
+  /** Standard error from blocking (cross-check of `se`); NaN when the region is too short. */
+  blockSe: number;
 }
 
 /**
@@ -302,5 +304,155 @@ export function summarize(
     equilibrationFraction: x1 > x0 ? (start - x0) / (x1 - x0) : 0,
     se,
     slope: sxx > 0 ? sxy / sxx : NaN,
+    blockSe: blockingSE(prodY).se,
   };
+}
+
+export interface BlockLevel {
+  /** Frames averaged into each block (2^level). */
+  blockSize: number;
+  blocks: number;
+  /** Standard error of the mean estimated at this block size. */
+  se: number;
+}
+
+/**
+ * Flyvbjerg–Petersen blocking: repeatedly average neighbouring pairs and estimate the
+ * standard error at each block size. Mirrors pyblock's reblock (sample variance, odd last
+ * value dropped at each level).
+ */
+export function reblock(values: ArrayLike<number>): BlockLevel[] {
+  let data: number[] = [];
+  for (let i = 0; i < values.length; i++) if (Number.isFinite(values[i])) data.push(values[i]);
+  const levels: BlockLevel[] = [];
+  for (let level = 0; data.length >= 2; level++) {
+    const n = data.length;
+    let mean = 0;
+    for (const v of data) mean += v;
+    mean /= n;
+    let ss = 0;
+    for (const v of data) ss += (v - mean) ** 2;
+    levels.push({ blockSize: 2 ** level, blocks: n, se: Math.sqrt(ss / (n - 1) / n) });
+    const next: number[] = [];
+    for (let i = 0; i + 1 < n; i += 2) next.push((data[i] + data[i + 1]) / 2);
+    data = next;
+  }
+  return levels;
+}
+
+/**
+ * Standard error from blocking, at the block size chosen by the criterion of Wolff (2004) and
+ * Lee et al. (2011), B³ > 2 n (SE_B / SE_1)⁴, with pyblock's choice of the smallest block size
+ * that satisfies it. NaN when no block size does: the run is too short to estimate the error.
+ */
+export function blockingSE(values: ArrayLike<number>): { se: number; blockSize: number } {
+  const levels = reblock(values);
+  if (!levels.length) return { se: NaN, blockSize: NaN };
+  const n = levels[0].blocks;
+  const se0 = levels[0].se;
+  let best = -1;
+  for (let level = levels.length - 1; level >= 0; level--) {
+    if (2 ** (3 * level) > 2 * n * (levels[level].se / se0) ** 4) best = level;
+  }
+  return best < 0 ? { se: NaN, blockSize: NaN } : { se: levels[best].se, blockSize: levels[best].blockSize };
+}
+
+export interface Histogram {
+  edges: number[];
+  counts: number[];
+  /** Probability density: counts / (total × bin width). */
+  density: number[];
+}
+
+// numpy's linear-interpolation percentile, including its choice of lerp formula.
+function percentile(sorted: number[], q: number): number {
+  const pos = q * (sorted.length - 1);
+  const lo = Math.floor(pos);
+  const hi = Math.min(lo + 1, sorted.length - 1);
+  const t = pos - lo;
+  const a = sorted[lo];
+  const b = sorted[hi];
+  return t >= 0.5 ? b - (b - a) * (1 - t) : a + (b - a) * t;
+}
+
+/** Evenly spaced points from start to stop inclusive, computed like numpy.linspace. */
+export function linspace(start: number, stop: number, num: number): number[] {
+  if (num === 1) return [start];
+  const step = (stop - start) / (num - 1);
+  const out = Array.from({ length: num }, (_, i) => i * step + start);
+  out[num - 1] = stop;
+  return out;
+}
+
+/**
+ * Histogram with numpy's bins="auto" rule (numpy ≥ 2.1: the smaller of the Sturges width and
+ * the Freedman–Diaconis width, the latter kept at least half the sqrt-rule width).
+ */
+export function histogram(values: ArrayLike<number>): Histogram {
+  const a: number[] = [];
+  for (let i = 0; i < values.length; i++) if (Number.isFinite(values[i])) a.push(values[i]);
+  const n = a.length;
+  if (!n) return { edges: [0, 1], counts: [0], density: [0] };
+  const sorted = [...a].sort((p, q) => p - q);
+  const min = sorted[0];
+  const max = sorted[n - 1];
+  const ptp = max - min;
+  const fd = 2 * (percentile(sorted, 0.75) - percentile(sorted, 0.25)) * n ** (-1 / 3);
+  const sturges = ptp / (Math.log2(n) + 1);
+  const width = Math.min(Math.max(fd, ptp / Math.sqrt(n) / 2), sturges);
+  const first = ptp === 0 ? min - 0.5 : min;
+  const last = ptp === 0 ? max + 0.5 : max;
+  const bins = width ? Math.ceil((last - first) / width) : 1;
+  const edges = linspace(first, last, bins + 1);
+
+  const counts = new Array<number>(bins).fill(0);
+  for (const v of a) {
+    let i = Math.trunc(((v - first) / (last - first)) * bins);
+    if (i === bins) i--;
+    // Same ±1 corrections numpy applies near bin edges.
+    if (v < edges[i]) i--;
+    else if (v >= edges[i + 1] && i !== bins - 1) i++;
+    counts[i]++;
+  }
+  const density = counts.map((c, i) => c / (edges[i + 1] - edges[i]) / n);
+  return { edges, counts, density };
+}
+
+export interface Kde {
+  x: number[];
+  density: number[];
+  /** Gaussian kernel width (Scott's rule), in data units. */
+  bandwidth: number;
+}
+
+/**
+ * Gaussian kernel density estimate with Scott's bandwidth, as scipy.stats.gaussian_kde,
+ * evaluated on `points` evenly spaced values spanning the data ± 3 bandwidths.
+ * Returns null when the data have no spread.
+ */
+export function kde(values: ArrayLike<number>, points = 200): Kde | null {
+  const a: number[] = [];
+  for (let i = 0; i < values.length; i++) if (Number.isFinite(values[i])) a.push(values[i]);
+  const n = a.length;
+  if (n < 2) return null;
+  const { sd } = meanSd(a);
+  if (!(sd > 0)) return null;
+  const bandwidth = sd * n ** (-1 / 5);
+  let min = Infinity;
+  let max = -Infinity;
+  for (const v of a) {
+    if (v < min) min = v;
+    if (v > max) max = v;
+  }
+  const x = linspace(min - 3 * bandwidth, max + 3 * bandwidth, points);
+  const norm = 1 / (n * bandwidth * Math.sqrt(2 * Math.PI));
+  const density = x.map((g) => {
+    let s = 0;
+    for (const v of a) {
+      const z = (g - v) / bandwidth;
+      s += Math.exp(-0.5 * z * z);
+    }
+    return s * norm;
+  });
+  return { x, density, bandwidth };
 }

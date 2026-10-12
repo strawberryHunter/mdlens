@@ -11,6 +11,8 @@ export function FigureStudio({
   panels,
   presetId,
   onPreset,
+  view,
+  onView,
   onRemovePanel,
   baseName,
   aggregateFailed,
@@ -21,6 +23,8 @@ export function FigureStudio({
   panels: Panel[];
   presetId: string;
   onPreset: (id: string) => void;
+  view: "time" | "distribution";
+  onView: (view: "time" | "distribution") => void;
   onRemovePanel: (id: string) => void;
   baseName: string;
   aggregateFailed: boolean;
@@ -72,6 +76,14 @@ export function FigureStudio({
     <Card className="overflow-hidden">
       <div className="flex flex-wrap items-center gap-2 border-b border-line px-4 py-3">
         <h2 className="mr-1 text-[13px] font-semibold text-ink">Figure</h2>
+        <Segmented
+          value={view}
+          onChange={onView}
+          options={[
+            { value: "time", label: "Over time", title: "Values against time" },
+            { value: "distribution", label: "Distribution", title: "Histogram and density of the production region" },
+          ]}
+        />
         <div className="flex min-w-0 flex-1 flex-wrap gap-1.5">
           {panels.map((p, i) => (
             <span key={p.id} className="inline-flex items-center gap-1 rounded-full bg-raised py-0.5 pl-2 pr-1 text-[12px] text-ink">

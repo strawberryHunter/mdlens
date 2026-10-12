@@ -1,4 +1,4 @@
-import { Copy } from "lucide-react";
+import { Copy, TriangleAlert } from "lucide-react";
 import { Fragment } from "react";
 import { fmt, pm } from "../lib/format";
 import type { Summary } from "../lib/stats";
@@ -45,6 +45,9 @@ export function StatsTable({
               <th className="px-4 py-2 font-medium">Series</th>
               {timeUnit && <th className="px-3 py-2 text-right font-medium">From</th>}
               <th className="px-3 py-2 text-right font-medium">Mean ± SE</th>
+              <th className="px-3 py-2 text-right font-medium" title="Independent error estimate by blocking (Flyvbjerg–Petersen)">
+                SE (block)
+              </th>
               <th className="px-3 py-2 text-right font-medium">SD</th>
               {timeUnit && <th className="px-3 py-2 text-right font-medium">Drift</th>}
               <th className="px-3 py-2 text-right font-medium">Frames</th>
@@ -56,7 +59,7 @@ export function StatsTable({
               <Fragment key={g.id}>
                 {groups.length > 1 && (
                   <tr>
-                    <td colSpan={7} className="bg-raised/60 px-4 py-1.5 text-[12px] font-semibold text-ink">
+                    <td colSpan={8} className="bg-raised/60 px-4 py-1.5 text-[12px] font-semibold text-ink">
                       {g.label}
                     </td>
                   </tr>
@@ -78,6 +81,7 @@ export function StatsTable({
                         </td>
                       )}
                       <td className="px-3 py-2 text-right font-medium text-ink">{text}</td>
+                      <BlockCell se={s.se} blockSe={s.blockSe} />
                       <td className="px-3 py-2 text-right text-muted">{fmt(s.sd, 3)}</td>
                       {timeUnit && (
                         <td className="px-3 py-2 text-right text-muted">
@@ -100,8 +104,33 @@ export function StatsTable({
       </div>
       <p className="border-t border-line px-4 py-2.5 text-[11.5px] leading-relaxed text-muted">
         SE is corrected for autocorrelation (statistical inefficiency), so it reflects the number of independent samples, not frames.
+        SE (block) estimates the same error by block averaging; when the two differ by more than 2×, the run is probably not converged.
         {!manual && timeUnit && " Production starts where the effective sample count is largest (Chodera, JCTC 2016)."}
       </p>
     </Card>
+  );
+}
+
+/** The blocking error, flagged when it disagrees with the autocorrelation error. */
+function BlockCell({ se, blockSe }: { se: number; blockSe: number }) {
+  if (!Number.isFinite(blockSe)) {
+    return (
+      <td className="px-3 py-2 text-right text-muted" title="No block size gives a stable error: the region is too short or still drifting.">
+        –
+      </td>
+    );
+  }
+  const ratio = blockSe / se;
+  const disagree = Number.isFinite(ratio) && (ratio > 2 || ratio < 0.5);
+  return (
+    <td
+      className={`px-3 py-2 text-right ${disagree ? "text-warn" : "text-muted"}`}
+      title={disagree ? `The two error estimates differ by ${ratio.toFixed(1)}×: the run may not be converged.` : undefined}
+    >
+      <span className="inline-flex items-center gap-1">
+        {disagree && <TriangleAlert className="size-3.5" />}
+        {fmt(blockSe, 2)}
+      </span>
+    </td>
   );
 }

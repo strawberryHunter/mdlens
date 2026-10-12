@@ -4,15 +4,17 @@
 
 MDLens reads output from GROMACS, NAMD, OpenMM, CHARMM, LAMMPS, AMBER and PLUMED, figures out which engine wrote it, finds where each run equilibrated, and exports figures sized for journals and slides. Nothing is installed and nothing is uploaded: files are parsed locally in the browser, so unpublished data stays on your machine.
 
-**Live app:** https://strawberryhunter.github.io/mdlens/
+**Live app:** https://strawberryhunter.github.io/mdlens/ · **[Guide](https://strawberryhunter.github.io/mdlens/#guide)**
 
-![MDLens dashboard comparing temperature from four engines](docs/screenshot.png)
+![MDLens: four engines compared, units converted, distributions, and problems in damaged logs flagged](docs/demo.gif)
 
 ## What it does
 
 - **Any engine, one view.** The engine is detected from the file contents. Engine-specific names (`TEMP`, `Temp`, `TEMPerature`, `TEMP(K)`) map to one quantity, and units are converted (kcal ↔ kJ, atm ↔ bar, Å ↔ nm, fs/ps/ns/µs), so runs from different engines overlay directly.
 - **Equilibration detection.** For every quantity, MDLens picks the start of the production region that maximises the number of uncorrelated samples ([Chodera, *J. Chem. Theory Comput.* 2016, 12, 1799](https://doi.org/10.1021/acs.jctc.5b00784)). The cut-off is marked on the figure.
 - **Blow-ups caught.** If the temperature turns NaN and stays that way, the run is flagged as unstable and later frames are left out of the statistics. Files whose x axis is not time (e.g. steps) are kept out of time-axis figures, with a warning.
+- **Two error estimates.** Next to the autocorrelation-corrected SE, a blocking estimate (Flyvbjerg–Petersen) is shown; when they disagree by more than 2× the run is flagged as probably not converged.
+- **Distributions.** Switch any figure to the histogram and kernel density of the production region.
 - **Honest error bars.** Production averages come with a standard error corrected for autocorrelation (statistical inefficiency), not the naive SD/√N. Values are rounded the way papers report them and copy as `300.0 ± 0.4 K`.
 - **Overview at a glance.** Every quantity gets a card with its production mean, a sparkline and an equilibration status ("Equilibrated at 0.192 ns", "Still relaxing at > 50% of run").
 - **Figures for papers.** 1-column (3.3 in), 2-column (7 in), square and 16:9 presets; stacked panels with a, b, c labels; colour-blind-safe palette; legend placed where it hides the least data. Export SVG (physical size in inches), PNG at 300/600 dpi with DPI metadata (pastes into PowerPoint at the right size), clipboard, or CSV.
@@ -33,7 +35,7 @@ MDLens reads output from GROMACS, NAMD, OpenMM, CHARMM, LAMMPS, AMBER and PLUMED
 
 ## Validation
 
-Statistics are checked against [pymbar](https://github.com/choderalab/pymbar) 4.2.0, the reference implementation of the equilibration method, on five series (white noise, AR(1) noise, fast and slow relaxations, and the temperature from the NAMD sample log read by an independent Python parser):
+Statistics are checked against [pymbar](https://github.com/choderalab/pymbar) 4.2.0 (the reference implementation of the equilibration method), [pyblock](https://github.com/jsspencer/pyblock), numpy and scipy, on five series (white noise, AR(1) noise, fast and slow relaxations, and the temperature from the NAMD sample log read by an independent Python parser):
 
 | Check | Result |
 |---|---|
@@ -41,6 +43,9 @@ Statistics are checked against [pymbar](https://github.com/choderalab/pymbar) 4.
 | Mean and SE over the same production region | identical to ~10⁻¹⁵ |
 | Equilibration start and production mean vs `detect_equilibration` | identical in all five cases |
 | NAMD temperatures read by MDLens vs the Python parser | identical |
+| Blocking standard errors vs pyblock 0.6 `reblock` / `find_optimal_block` | identical at every block size |
+| Histogram vs `numpy.histogram(bins="auto", density=True)` | identical edges and densities |
+| Kernel density vs `scipy.stats.gaussian_kde` (Scott's rule) | identical to ~10⁻¹⁰ |
 
 Every frame is a candidate start, as in pymbar, for runs of up to 2000 frames; longer runs are evenly strided to 2000 frames (about 30 ms per series). `npm run validate` prints the comparison. `validation/make_reference.py` regenerates the reference values (`conda env create -f validation/environment.yml`).
 

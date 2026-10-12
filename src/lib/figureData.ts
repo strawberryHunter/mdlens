@@ -1,5 +1,5 @@
 import type { FigureBand, FigureLine, FigurePanel, FigureRule } from "./figure";
-import { aggregate, lttb, movingAverage, type Summary } from "./stats";
+import { aggregate, histogram, kde, lttb, movingAverage, type Summary } from "./stats";
 import { PALETTE, type Panel } from "./workspace";
 
 const MAX_POINTS = 2500;
@@ -70,4 +70,40 @@ export function panelToFigure(panel: Panel, yLabel: string, o: FigureOptions): {
   if (lines.filter((l) => l.legend !== false).length === 1 && !agg) lines.forEach((l) => (l.legend = false));
 
   return { figure: { yLabel, lines, bands, rules }, aggregateFailed: o.aggregate && panel.series.length >= 2 && !agg };
+}
+
+/**
+ * Distribution of each series over its production region: a kernel density estimate drawn as
+ * a line, over a faint histogram outline. `range` overrides the per-series production region.
+ */
+export function panelToDistribution(
+  panel: Panel,
+  valueLabel: string,
+  o: { summaries: Map<string, Summary>; range: { from: number; to: number } | null; showHistogram: boolean },
+): FigurePanel {
+  const lines: FigureLine[] = [];
+  for (const s of panel.series) {
+    const summary = o.summaries.get(s.id) ?? s.summary;
+    const from = o.range?.from ?? summary.from;
+    const to = o.range?.to ?? s.unstableFrom ?? Infinity;
+    const values: number[] = [];
+    for (let i = 0; i < s.x.length; i++) {
+      // The unstable point itself is excluded, matching the statistics.
+      if (s.x[i] >= from && (o.range ? s.x[i] <= to : s.x[i] < to)) values.push(s.y[i]);
+    }
+    if (o.showHistogram) {
+      const h = histogram(values);
+      const x: number[] = [];
+      const y: number[] = [];
+      h.density.forEach((d, i) => {
+        x.push(h.edges[i], h.edges[i + 1]);
+        y.push(d, d);
+      });
+      lines.push({ name: s.name, color: s.color, x: [h.edges[0], ...x, h.edges.at(-1)!], y: [0, ...y, 0], opacity: 0.35, legend: false });
+    }
+    const k = kde(values);
+    if (k) lines.push({ name: s.name, color: s.color, x: k.x, y: k.density, dash: s.dash });
+  }
+  if (lines.filter((l) => l.legend !== false).length === 1) lines.forEach((l) => (l.legend = false));
+  return { yLabel: "Probability density", xLabel: valueLabel, lines, bands: [], rules: [] };
 }

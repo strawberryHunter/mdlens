@@ -141,6 +141,19 @@ export function Field({ label, children }: { label: string; children: ReactNode 
   );
 }
 
+/**
+ * A labelled group of buttons (e.g. a Segmented control). A <label> would hand its whole
+ * text to the first button as that button's accessible name.
+ */
+export function FieldGroup({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div role="group" aria-label={label} className="space-y-1">
+      <span className="block text-xs text-muted">{label}</span>
+      {children}
+    </div>
+  );
+}
+
 export function NumberInput({
   value,
   onChange,
